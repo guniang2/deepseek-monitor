@@ -6,7 +6,8 @@ A sleek, lightweight desktop app for tracking your DeepSeek account balance, API
 
 [![Electron](https://img.shields.io/badge/Electron-42.4.0-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/guniang2/deepseek-monitor/releases)
+[![Release](https://img.shields.io/github/v/release/guniang2/deepseek-monitor?color=blue&label=release)](https://github.com/guniang2/deepseek-monitor/releases)
+[![Downloads](https://img.shields.io/github/downloads/guniang2/deepseek-monitor/total?color=green)](https://github.com/guniang2/deepseek-monitor/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/guniang2/deepseek-monitor/pulls)
 
@@ -27,11 +28,19 @@ The official DeepSeek platform shows your balance and usage scattered across dif
 
 ## 📸 Screenshots
 
-<!-- Add your screenshots here, e.g.:
+> Want to add your screenshots? Drop them in `assets/screenshots/` and fill in the images below. The README will look much better with them — here's how:
+
 <p align="center">
-  <img src="assets/screenshots/dashboard.png" width="360" />
-  <img src="assets/screenshots/details.png" width="360" />
+  <!-- <img src="assets/screenshots/dashboard.png" alt="Dashboard" width="360" /> -->
+  <!-- <img src="assets/screenshots/details.png" alt="Usage details" width="360" /> -->
 </p>
+
+<!--
+How to add screenshots:
+1. Open the app, press PrintScreen (or use Win+Shift+S on Windows / Cmd+Shift+4 on macOS)
+2. Crop the main dashboard and the model details view
+3. Save them to assets/screenshots/ as dashboard.png and details.png
+4. Uncomment the two lines above
 -->
 
 ## 🚀 Features
@@ -116,15 +125,20 @@ Enable "Auto refresh" in Settings and pick an interval — the app will keep bal
 
 ```
 deepseek-monitor/
-├── assets/                 # App icons
+├── .github/                 # CI workflow & issue/PR templates
+│   └── workflows/build.yml  # Auto build & release on version tags
+├── assets/                  # App icons
 │   ├── icon.png
 │   └── icon.ico
-├── src/                    # Source code
-│   ├── main.js             # Main process: window management, IPC, API requests, config storage
-│   ├── preload.js          # Preload script: safely exposes main-process APIs to the renderer
-│   └── index.html          # Renderer: full UI and interaction logic
-├── package.json            # Project config & build scripts
-└── README.md               # This file
+├── src/                     # Source code
+│   ├── main.js              # Main process: window management, IPC, API requests, config storage
+│   ├── preload.js           # Preload script: safely exposes main-process APIs to the renderer
+│   └── index.html           # Renderer: full UI and interaction logic
+├── CONTRIBUTING.md          # Contribution guidelines
+├── SECURITY.md              # Security policy
+├── CHANGELOG.md             # Release history
+├── package.json             # Project config & build scripts
+└── README.md                # This file
 ```
 
 ## 🛠 Tech Stack
@@ -164,11 +178,9 @@ Config (API key, usage token, auto-launch, etc.) is stored in `config.json` unde
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to open [issues](https://github.com/guniang2/deepseek-monitor/issues) or submit [pull requests](https://github.com/guniang2/deepseek-monitor/pulls). Before making changes, please:
+Contributions are welcome! Please read the [contributing guidelines](CONTRIBUTING.md) and [code of conduct](CODE_OF_CONDUCT.md) before getting started, and check the [security policy](SECURITY.md) before reporting vulnerabilities. Then feel free to open [issues](https://github.com/guniang2/deepseek-monitor/issues) or submit [pull requests](https://github.com/guniang2/deepseek-monitor/pulls).
 
-1. Keep the UI consistent with the existing transparent, glassy dark style
-2. Test your changes with `npm start`
-3. For security-sensitive changes (token handling, IPC), explain the rationale in the PR description
+**Looking for help?** Add your app screenshots to the README (see the [Screenshots](#-screenshots) section), translate the UI, or help answer questions in the issues — every bit counts for a young open-source project.
 
 ## 📄 License
 

@@ -6,7 +6,8 @@
 
 [![Electron](https://img.shields.io/badge/Electron-42.4.0-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/guniang2/deepseek-monitor/releases)
+[![Release](https://img.shields.io/github/v/release/guniang2/deepseek-monitor?color=blue&label=release)](https://github.com/guniang2/deepseek-monitor/releases)
+[![Downloads](https://img.shields.io/github/downloads/guniang2/deepseek-monitor/total?color=green)](https://github.com/guniang2/deepseek-monitor/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/guniang2/deepseek-monitor/pulls)
 
@@ -27,11 +28,19 @@ DeepSeek 官方平台的余额和用量分散在不同页面，用量看板甚�
 
 ## 📸 界面预览
 
-<!-- 在此处添加你的截图，例如：
+> 想要添加截图？把截图放到 `assets/screenshots/` 目录并填入下面的图片即可。有截图会让 README 看起来好得多——方法如下：
+
 <p align="center">
-  <img src="assets/screenshots/dashboard.png" width="360" />
-  <img src="assets/screenshots/details.png" width="360" />
+  <!-- <img src="assets/screenshots/dashboard.png" alt="仪表盘" width="360" /> -->
+  <!-- <img src="assets/screenshots/details.png" alt="用量详情" width="360" /> -->
 </p>
+
+<!--
+如何添加截图：
+1. 打开应用，按 PrintScreen（Windows 可用 Win+Shift+S，macOS 可用 Cmd+Shift+4）
+2. 分别截取主仪表盘和模型详情视图
+3. 保存到 assets/screenshots/ 目录，命名为 dashboard.png 和 details.png
+4. 取消上方两行的注释
 -->
 
 ## 🚀 功能特性
@@ -116,15 +125,20 @@ npm run build:linux
 
 ```
 deepseek-monitor/
-├── assets/                 # 应用图标资源
+├── .github/                 # CI 工作流与 Issue/PR 模板
+│   └── workflows/build.yml  # 打标签时自动构建并发布
+├── assets/                  # 应用图标资源
 │   ├── icon.png
 │   └── icon.ico
-├── src/                    # 源代码
-│   ├── main.js             # 主进程：窗口管理、IPC、API 请求、配置存储
-│   ├── preload.js          # 预加载脚本：安全暴露主进程 API 到渲染进程
-│   └── index.html          # 渲染进程：完整 UI 界面与交互逻辑
-├── package.json            # 项目配置与构建脚本
-└── README.md               # 本文件
+├── src/                     # 源代码
+│   ├── main.js              # 主进程：窗口管理、IPC、API 请求、配置存储
+│   ├── preload.js           # 预加载脚本：安全暴露主进程 API 到渲染进程
+│   └── index.html           # 渲染进程：完整 UI 界面与交互逻辑
+├── CONTRIBUTING.md          # 贡献指南
+├── SECURITY.md              # 安全策略
+├── CHANGELOG.md             # 版本历史
+├── package.json             # 项目配置与构建脚本
+└── README.md                # 本文件
 ```
 
 ## 🛠 技术栈
@@ -164,11 +178,9 @@ deepseek-monitor/
 
 ## 🤝 参与贡献
 
-欢迎提交 [Issue](https://github.com/guniang2/deepseek-monitor/issues) 或 [Pull Request](https://github.com/guniang2/deepseek-monitor/pulls)！提交改动前请注意：
+欢迎提交 [Issue](https://github.com/guniang2/deepseek-monitor/issues) 或 [Pull Request](https://github.com/guniang2/deepseek-monitor/pulls)！开始前请阅读[贡献指南](CONTRIBUTING.md)与[行为准则](CODE_OF_CONDUCT.md)，报告安全问题前请查看[安全策略](SECURITY.md)。
 
-1. 保持 UI 与现有的透明毛玻璃深色风格一致
-2. 使用 `npm start` 测试你的改动
-3. 涉及安全敏感代码（Token 处理、IPC）的改动，请在 PR 描述中说明理由
+**需要帮助？** 给 README 添加应用截图（见[界面预览](#-界面预览)）、翻译 UI、或帮助回答 issues 中的问题——每一个贡献对年轻的开源项目都很重要。
 
 ## 📄 许可证
 

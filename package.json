@@ -12,16 +12,24 @@
   },
   "build": {
     "appId": "com.deepseek.monitor",
-    "productName": "AI Model Monitor",
+    "productName": "DeepSeek Monitor",
     "directories": {
       "output": "dist"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "guniang2",
+      "repo": "deepseek-monitor"
     },
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
     },
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "assets/icon.png"
     },
     "linux": {
@@ -48,10 +56,5 @@
   "devDependencies": {
     "electron": "^42.4.0",
     "electron-builder": "^24.13.3"
-  },
-  "dependencies": {
-    "auto-launch": "^5.0.5",
-    "axios": "^1.6.0",
-    "electron-store": "^8.1.0"
   }
 }
