@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Model Monitor</title>
+  <style>
+    :root {
+      --fg: 246, 239, 222;
+      --brand: #4d6bfe;
+      --brand-soft: #6b85ff;
+      --flash: #4091ff;
+      --pro: #da38f0;
+      --hit: #34d399;
+      --miss: #ff9c2b;
+      --out: #a78bfa;
+      --danger: #ff7f7f;
+      --panel: rgba(24, 29, 38, 0.50);
+      --panel-deep: rgba(17, 21, 29, 0.44);
+      --card: rgba(18, 23, 31, 0.42);
+      --card-2: rgba(39, 49, 64, 0.34);
+      --border: rgba(255, 255, 255, 0.16);
+      --text: rgba(var(--fg), 0.92);
+      --muted: rgba(var(--fg), 0.62);
+      --faint: rgba(var(--fg), 0.42);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    body {
+      font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      user-select: none;
+      padding: 8px;
+    }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+
+    .app {
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background:
+        linear-gradient(145deg, rgba(47, 60, 78, 0.46), rgba(22, 31, 43, 0.42)),
+        var(--panel);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34), inset 0 1px rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(26px) saturate(1.12);
+      -webkit-backdrop-filter: blur(26px) saturate(1.12);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      -webkit-app-region: drag;
+      height: 58px;
+      padding: 14px 16px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex: 0 0 auto;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; pointer-events: none; }
+    .logo {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2f7dff, #273fd1);
+      color: white;
+      font-weight: 900;
+      font-size: 16px;
+    }
+    .brand h1 { margin: 0; font-size: 15px; line-height: 1; letter-spacing: 0; }
+    .actions { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 7px; }
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .icon-btn:hover { background: rgba(var(--fg), 0.14); }
+    .icon-btn.danger:hover { color: var(--danger); background: rgba(255, 127, 127, 0.14); }
+
+    .view {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: none;
+      flex-direction: column;
+      gap: 9px;
+      padding: 0 16px 16px;
+      overflow: hidden;
+    }
+    .view.active { display: flex; }
+    .scroll-view {
+      overflow-y: auto;
+      padding-right: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+    }
+    .scroll-view::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+    .scroll-view::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.035);
+      border-radius: 999px;
+      margin: 10px 0;
+    }
+    .scroll-view::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.34);
+      background-clip: padding-box;
+    }
+    .scroll-view::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.54);
+      background-clip: padding-box;
+    }
+    .scroll-view::-webkit-scrollbar-button {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(25, 31, 42, 0.46), rgba(18, 23, 32, 0.38));
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+    }
+    .row-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .caption {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 5px 9px;
+      background: rgba(65, 118, 38, 0.42);
+      color: #58ee72;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .status::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+    .status.off { color: #ffaf6f; background: rgba(150, 70, 40, 0.42); }
+
+    .balance-card { padding: 13px 14px; }
+    .balance-amount {
+      margin-top: 14px;
+      color: var(--brand-soft);
+      font-size: 32px;
+      line-height: 1;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+    .balance-amount.dim { color: var(--muted); font-size: 22px; }
+    .balance-error { margin-top: 7px; color: var(--danger); font-size: 11px; font-weight: 800; line-height: 1.45; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .mini-card {
+      min-height: 56px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: rgba(43, 54, 70, 0.34);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .mini-card strong { color: var(--miss); font-size: 17px; font-weight: 900; white-space: nowrap; }
+
+    .usage-stack { display: flex; flex-direction: column; gap: 7px; }
+    .usage-row {
+      width: 100%;
+      min-height: 70px;
+      border: 0;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .model-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+    .model-badge.flash { color: var(--flash); background: rgba(64, 145, 255, 0.16); }
+    .model-badge.pro { color: var(--pro); background: rgba(218, 56, 240, 0.16); }
+    .model-badge.large { width: 54px; height: 54px; font-size: 24px; }
+    .usage-main { min-width: 0; flex: 1; }
+    .usage-main h2 { margin: 0 0 7px; font-size: 16px; line-height: 1; }
+    .token-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-weight: 800; }
+    .token-line span { width: 98px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .progress { height: 4px; flex: 1; border-radius: 999px; background: rgba(0,0,0,0.18); overflow: hidden; }
+    .progress i { display: block; height: 100%; border-radius: inherit; transition: width 0.25s ease; }
+    .progress i.flash { background: linear-gradient(90deg, #4690ff, #65d0d1); }
+    .progress i.pro { background: linear-gradient(90deg, #d93ff2, #7463d7); }
+    .hit-rate { margin-top: 6px; font-size: 11px; font-weight: 800; }
+    .hit-rate.flash { color: #65d0d1; }
+    .hit-rate.pro { color: #c98bff; }
+    .price { width: 58px; text-align: right; flex: 0 0 auto; }
+    .price strong { display: block; font-size: 13px; }
+    .price span { display: block; margin-top: 3px; color: var(--faint); font-size: 10px; font-weight: 800; }
+
+    .chart-card {
+      flex: 1 1 auto;
+      min-height: 154px;
+      padding: 12px 14px 13px;
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+    }
+    .chart-meta { color: var(--faint); font-size: 11px; font-weight: 800; }
+    .bars {
+      flex: 1;
+      min-height: 76px;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      align-items: end;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .bar-col {
+      position: relative;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 14px 1fr 14px;
+      align-items: end;
+      text-align: center;
+      gap: 4px;
+    }
+    .bar-value { color: rgba(var(--fg), 0.72); font-size: 8px; font-weight: 900; overflow: hidden; }
+    .bar-slot { height: 100%; display: flex; align-items: end; justify-content: center; }
+    .stacked-bar {
+      width: 100%;
+      max-width: 30px;
+      min-height: 3px;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column-reverse;
+      background: rgba(var(--fg), 0.1);
+      transition: height 0.25s ease;
+    }
+    .stacked-bar i { width: 100%; flex-basis: 0; min-height: 2px; }
+    .stacked-bar .hit { background: var(--hit); }
+    .stacked-bar .miss { background: var(--miss); }
+    .stacked-bar .out { background: var(--out); }
+    .stacked-bar .empty { flex-grow: 1; min-height: 0; background: rgba(var(--fg), 0.12); }
+    .bar-day { color: var(--faint); font-size: 9px; font-weight: 900; }
+    .legend { display: flex; justify-content: center; gap: 14px; padding-top: 10px; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 10px; font-weight: 800; }
+    .dot { width: 8px; height: 8px; border-radius: 4px; display: inline-block; }
+    .dot.hit { background: var(--hit); }
+    .dot.miss { background: var(--miss); }
+    .dot.out { background: var(--out); }
+    .tooltip {
+      position: absolute;
+      left: 50%;
+      bottom: 100%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: none;
+      min-width: 188px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      background: rgba(30, 28, 16, 0.88);
+      backdrop-filter: blur(14px);
+      text-align: left;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .bar-col:hover .tooltip { display: block; }
+    .bar-col:first-child .tooltip, .bar-col:nth-child(2) .tooltip { left: 2px; transform: none; }
+    .bar-col:nth-last-child(1) .tooltip, .bar-col:nth-last-child(2) .tooltip { left: auto; right: 2px; transform: none; }
+    .tooltip header { display: flex; justify-content: space-between; gap: 14px; padding-bottom: 7px; margin-bottom: 7px; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 12px; font-weight: 900; }
+    .tip-row { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .tip-row strong { margin-left: auto; color: var(--text); }
+
+    .detail-head {
+      margin-top: 2px;
+      min-height: 86px;
+      border-radius: 18px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .detail-head h2 { margin: 0 0 7px; font-size: 22px; }
+    .detail-head p { margin: 0; color: var(--muted); font-size: 13px; font-weight: 800; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .detail-metric { min-height: 76px; padding: 13px 14px; border-radius: 16px; }
+    .detail-metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .detail-metric strong { display: block; margin-top: 9px; font-size: 24px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .detail-chart { flex: 1 1 auto; min-height: 0; padding: 13px 14px; border-radius: 16px; display: flex; flex-direction: column; }
+
+    .settings-panel { gap: 0; }
+    .section { border-top: 1px solid rgba(255,255,255,0.16); padding: 14px 0; }
+    .section h3 { margin: 0 0 9px; font-size: 12px; display: flex; align-items: center; gap: 7px; }
+    .section p { margin: 0 0 8px; color: var(--muted); font-size: 11px; line-height: 1.45; font-weight: 700; }
+    .section .faint { color: var(--faint); overflow-wrap: anywhere; }
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { color: var(--muted); font-size: 10px; font-weight: 900; }
+    input, select {
+      width: 100%;
+      height: 32px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      padding: 0 10px;
+      background: rgba(24, 23, 19, 0.76);
+      color: white;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: rgba(77,107,254,0.72); }
+    .settings-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
+    .primary, .secondary, .link {
+      border: 0;
+      border-radius: 8px;
+      min-height: 30px;
+      padding: 6px 11px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .primary { background: var(--brand); color: white; }
+    .secondary { background: rgba(var(--fg), 0.18); }
+    .link { padding-left: 0; background: transparent; color: var(--brand-soft); }
+    button:disabled { opacity: 0.48; cursor: default; }
+    .configured { margin-left: auto; color: #58ee72; font-size: 11px; font-weight: 900; white-space: nowrap; }
+    .configured.off { color: var(--faint); }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; font-weight: 900; }
+    .toggle-row input { display: none; }
+    .toggle-row i { width: 44px; height: 22px; border-radius: 999px; background: rgba(120,116,96,0.55); position: relative; flex: 0 0 auto; }
+    .toggle-row i::after { content: ""; position: absolute; top: 3px; left: 4px; width: 16px; height: 16px; border-radius: 50%; background: #dce6ff; transition: left .18s ease; }
+    .toggle-row input:checked + i { background: var(--brand); }
+    .toggle-row input:checked + i::after { left: 24px; }
+    .segmented { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
+    .segmented button { border: 0; border-radius: 8px; padding: 8px 5px; background: rgba(var(--fg),0.18); font-size: 12px; font-weight: 900; cursor: pointer; }
+    .segmented button.active { background: var(--brand); }
+    .placeholder {
+      flex: 1 1 auto;
+      min-height: 80px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--faint);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 14px;
+    }
+    .last-update { color: var(--faint); text-align: center; font-size: 10px; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">D</div>
+        <h1 id="brandTitle">AI Model Monitor</h1>
+      </div>
+      <div class="actions">
+        <button class="icon-btn" id="refreshBtn" title="刷新" aria-label="刷新">↻</button>
+        <button class="icon-btn" id="settingsBtn" title="设置" aria-label="设置">⚙</button>
+        <button class="icon-btn" id="backBtn" title="返回" aria-label="返回" style="display:none;">←</button>
+        <button class="icon-btn" title="最小化" aria-label="最小化" id="minBtn">−</button>
+        <button class="icon-btn danger" title="关闭" aria-label="关闭" id="closeBtn">×</button>
+      </div>
+    </header>
+
+    <section class="view active" id="dashboardView">
+      <article class="card balance-card">
+        <div class="row-title">
+          <div class="caption">▣ 账户余额</div>
+          <div class="status" id="balanceStatus">查询中</div>
+        </div>
+        <div class="balance-amount dim" id="balanceAmount">查询中...</div>
+        <div class="balance-error" id="balanceError" style="display:none;"></div>
+        <div class="metric-grid">
+          <div class="mini-card">
+            <div class="caption">☀ 当日消耗</div>
+            <strong id="todayCost">—</strong>
+          </div>
+          <div class="mini-card">
+            <div class="caption">▦ 本月消费</div>
+            <strong id="monthCost">—</strong>
+          </div>
+        </div>
+      </article>
+
+      <div class="usage-stack">
+        <button class="card usage-row" data-model="flash">
+          <div class="model-badge flash">F</div>
+          <div class="usage-main">
+            <h2>V4 Flash</h2>
+            <div class="token-line">
+              <span id="flashTokens">—</span>
+              <div class="progress"><i class="flash" id="flashProgress" style="width:0%;"></i></div>
+            </div>
+            <div class="hit-rate flash" id="flashHitRate">缓存命中 —</div>
+          </div>
+          <div class="price"><strong id="flashCost">—</strong><span id="flashRatio">—</span></div>
+        </button>
+
+        <button class="card usage-row" data-model="pro">
+          <div class="model-badge pro">P</div>
+          <div class="usage-main">
+            <h2>V4 Pro</h2>
+            <div class="token-line">
+              <span id="proTokens">—</span>
+              <div class="progress"><i class="pro" id="proProgress" style="width:0%;"></i></div>
+            </div>
+            <div class="hit-rate pro" id="proHitRate">缓存命中 —</div>
+          </div>
+          <div class="price"><strong id="proCost">—</strong><span id="proRatio">—</span></div>
+        </button>
+      </div>
+
+      <article class="card chart-card">
+        <div class="row-title">
+          <div class="caption">▥ 最近 7 天 Token 趋势</div>
+          <div class="chart-meta" id="chartMeta">—</div>
+        </div>
+        <div class="bars" id="trendBars"></div>
+        <div class="legend">
+          <span><i class="dot hit"></i>命中</span>
+          <span><i class="dot miss"></i>未命中</span>
+          <span><i class="dot out"></i>输出</span>
+        </div>
+      </article>
+      <div class="last-update" id="lastUpdate">—</div>
+    </section>
+
+    <section class="view" id="detailView">
+      <article class="card detail-head" id="detailHero">
+        <div class="model-badge large flash" id="detailBadge">F</div>
+        <div>
+          <h2 id="detailTitle">V4 Flash</h2>
+          <p id="detailCost">—</p>
+        </div>
+      </article>
+      <div class="detail-grid">
+        <article class="card detail-metric"><span>API 请求次数</span><strong id="detailRequests">—</strong></article>
+        <article class="card detail-metric"><span>Tokens</span><strong id="detailTokens">—</strong></article>
+      </div>
+      <article class="card detail-chart">
+        <div class="row-title">
+          <div class="caption">▥ 按日 Token 消耗</div>
+          <div class="chart-meta" id="detailRange">—</div>
+        </div>
+        <div class="bars" id="detailBars"></div>
+        <div class="legend">
+          <span><i class="dot hit"></i>命中</span>
+          <span><i class="dot miss"></i>未命中</span>
+          <span><i class="dot out"></i>输出</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="view scroll-view settings-panel" id="settingsView">
+      <section class="section">
+        <h3>🔑 API Key</h3>
+        <p>用于调用 DeepSeek 官方余额接口。</p>
+        <p class="faint" id="configPath">—</p>
+        <input id="apiKeyInput" type="password" placeholder="sk-...">
+        <div class="settings-actions">
+          <button class="primary" id="saveKeyBtn">验证并保存</button>
+          <span class="configured off" id="keyState">未配置</span>
+          <button class="secondary" id="clearKeyBtn">清除 Key</button>
+        </div>
+        <p class="faint" id="keyMessage"></p>
+      </section>
+
+      <section class="section">
+        <h3>▥ 用量同步 Token</h3>
+        <p>用于读取 DeepSeek 平台用量数据，包括消费、请求数、缓存命中、缓存未命中和输出 Token。</p>
+        <div class="settings-actions">
+          <button class="primary" id="syncTokenBtn">网页登录自动同步</button>
+          <span class="configured off" id="tokenState">未配置</span>
+          <button class="secondary" id="clearTokenBtn">清除 Token</button>
+        </div>
+        <p class="faint" id="tokenMessage">自动同步会打开 DeepSeek 登录窗口，登录后自动保存用量 Token。</p>
+        <button class="link" id="toggleManualBtn">方式二：手动粘贴 Token</button>
+        <div id="manualTokenBox" style="display:none;">
+          <p class="faint">如果网页登录检测不到，可从 DeepSeek 网页会话中复制 Bearer token 粘贴到这里。</p>
+          <input id="usageTokenInput" type="password">
+          <div class="settings-actions">
+            <button class="primary" id="saveTokenBtn">保存 Token</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>⏻ 开机自启</h3>
+        <label class="toggle-row">
+          <span>登录 Windows 时自动启动</span>
+          <input type="checkbox" id="autoLaunchToggle">
+          <i></i>
+        </label>
+      </section>
+
+      <section class="section">
+        <h3>↻ 自动刷新</h3>
+        <label class="toggle-row">
+          <span>启用自动刷新</span>
+          <input type="checkbox" id="autoRefreshToggle">
+          <i></i>
+        </label>
+        <div class="segmented" id="refreshSegments">
+          <button data-seconds="60">1 分钟</button>
+          <button data-seconds="300">5 分钟</button>
+          <button data-seconds="1800">30 分钟</button>
+          <button data-seconds="3600">1 小时</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>ℹ 关于</h3>
+        <p>AI Model Monitor v1.2.0</p>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      config: {},
+      usage: null,
+      balance: null,
+      view: 'dashboard',
+      detailModel: 'flash',
+      refreshTimer: null,
+      loading: false
+    };
+
+    const fmtInt = (n) => Math.round(Number(n || 0)).toLocaleString('en-US');
+    const fmtMoney = (n) => Number.isFinite(Number(n)) ? '¥' + Number(n).toFixed(2) : '—';
+    const fmtTokensShort = (n) => {
+      n = Number(n || 0);
+      if (n >= 1e8) return (n / 1e6).toFixed(0) + 'M';
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return String(Math.round(n));
+    };
+    const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const todayStr = () => dateKey(new Date());
+    const mmdd = (date) => {
+      const parts = String(date).split('-');
+      return parts.length === 3 ? `${Number(parts[1])}/${Number(parts[2])}` : date;
+    };
+
+    function modelName(key) { return key === 'flash' ? 'V4 Flash' : 'V4 Pro'; }
+    function modelByKey(key) { return state.usage?.models?.find((item) => item.key === key) || null; }
+    function hitRate(model) {
+      const base = Number(model?.cacheHitTokens || 0) + Number(model?.cacheMissTokens || 0);
+      return base > 0 ? Math.round(Number(model.cacheHitTokens || 0) / base * 100) + '%' : '—';
+    }
+    function recentDays() {
+      const source = new Map((state.usage?.days || []).filter((day) => day.date <= todayStr()).map((day) => [day.date, day]));
+      const now = new Date();
+      return Array.from({ length: 7 }, (_, index) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() + index - 6);
+        const key = dateKey(d);
+        return source.get(key) || {
+          date: key,
+          flashTokens: 0, flashCacheHit: 0, flashCacheMiss: 0, flashResponse: 0,
+          proTokens: 0, proCacheHit: 0, proCacheMiss: 0, proResponse: 0,
+          totalTokens: 0, totalCost: 0
+        };
+      });
+    }
+
+    function showView(view) {
+      state.view = view;
+      $('dashboardView').classList.toggle('active', view === 'dashboard');
+      $('settingsView').classList.toggle('active', view === 'settings');
+      $('detailView').classList.toggle('active', view === 'detail');
+      $('settingsBtn').style.display = view === 'dashboard' ? '' : 'none';
+      $('backBtn').style.display = view === 'dashboard' ? 'none' : '';
+      $('refreshBtn').style.display = view === 'settings' ? 'none' : '';
+      if (view === 'detail') renderDetail();
+    }
+
+    function setBalanceError(message, stateName = 'off') {
+      $('balanceStatus').textContent = stateName === 'off' ? '不可用' : '查询失败';
+      $('balanceStatus').classList.add('off');
+      $('balanceAmount').textContent = message.includes('未配置') ? '未配置' : '查询失败';
+      $('balanceAmount').classList.add('dim');
+      $('balanceError').textContent = message;
+      $('balanceError').style.display = 'block';
+    }
+
+    function renderBalance(result) {
+      $('balanceError').style.display = 'none';
+      if (!result?.success || !result.data) {
+        setBalanceError(result?.error || '余额查询失败');
+        return;
+      }
+      const data = result.data;
+      const infos = data.balance_infos || [];
+      const total = infos.reduce((sum, item) => sum + Number(item.total_balance || 0), 0);
+      const available = data.is_available !== false;
+      $('balanceStatus').textContent = available ? '可用' : '余额不足';
+      $('balanceStatus').classList.toggle('off', !available);
+      $('balanceAmount').textContent = fmtMoney(total);
+      $('balanceAmount').classList.remove('dim');
+    }
+
+    function renderUsageRows() {
+      const flash = modelByKey('flash');
+      const pro = modelByKey('pro');
+      const maxTokens = Math.max(flash?.totalTokens || 0, pro?.totalTokens || 0, 1);
+      renderUsageRow('flash', flash, maxTokens);
+      renderUsageRow('pro', pro, maxTokens);
+      const today = state.usage?.days?.find((day) => day.date === todayStr());
+      $('todayCost').textContent = today ? fmtMoney(today.totalCost) : '—';
+      $('monthCost').textContent = state.usage ? fmtMoney(state.usage.monthCost || 0) : '—';
+    }
+
+    function setLegendMode(mode) {
+      const legend = document.querySelector('.trend-card .legend');
+      if (!legend) return;
+      legend.innerHTML = mode === 'cost'
+        ? '<span><i class="dot out"></i>消费金额</span>'
+        : '<span><i class="dot hit"></i>命中</span><span><i class="dot miss"></i>未命中</span><span><i class="dot out"></i>输出</span>';
+    }
+
+    function renderUsageRow(key, data, maxTokens) {
+      $(key + 'Tokens').textContent = data ? fmtInt(data.totalTokens) + ' Tokens' : '—';
+      $(key + 'Cost').textContent = data ? fmtMoney(data.cost) : '—';
+      $(key + 'Ratio').textContent = data && data.cost > 0 ? fmtTokensShort(data.totalTokens / data.cost) + ' T/¥' : '—';
+      $(key + 'HitRate').textContent = '缓存命中 ' + (data ? hitRate(data) : '—');
+      $(key + 'Progress').style.width = data ? Math.max(2, data.totalTokens / maxTokens * 100) + '%' : '0%';
+    }
+
+    function renderBars(targetId, points, metaId) {
+      const max = Math.max(...points.map((p) => p.total), 1);
+      const total = points.reduce((sum, p) => sum + p.total, 0);
+      const hit = points.reduce((sum, p) => sum + p.hit, 0);
+      const miss = points.reduce((sum, p) => sum + p.miss, 0);
+      const hitText = hit + miss > 0 ? Math.round(hit / (hit + miss) * 100) + '%' : '0%';
+      $(metaId).textContent = `命中率 ${hitText} · 合计 ${fmtTokensShort(total)}`;
+      $(targetId).innerHTML = points.map((point) => {
+        const height = point.total > 0 ? Math.max(3, point.total / max * 100) : 3;
+        return `
+          <div class="bar-col">
+            <span class="bar-value">${point.total > 0 ? fmtTokensShort(point.total) : '0'}</span>
+            <div class="bar-slot">
+              <div class="stacked-bar" style="height:${height}%;">
+                ${point.total > 0 ? `
+                  ${point.hit > 0 ? `<i class="hit" style="flex-grow:${point.hit}"></i>` : ''}
+                  ${point.miss > 0 ? `<i class="miss" style="flex-grow:${point.miss}"></i>` : ''}
+                  ${point.out > 0 ? `<i class="out" style="flex-grow:${point.out}"></i>` : ''}
+                ` : '<i class="empty"></i>'}
+              </div>
+            </div>
+            <span class="bar-day">${mmdd(point.date)}</span>
+            ${point.total > 0 ? `
+              <div class="tooltip">
+                <header><span>${point.date}</span><strong>${fmtInt(point.total)} tokens</strong></header>
+                <div class="tip-row"><i class="dot hit"></i>输入（命中缓存）<strong>${fmtInt(point.hit)}</strong></div>
+                <div class="tip-row"><i class="dot miss"></i>输入（未命中缓存）<strong>${fmtInt(point.miss)}</strong></div>
+                <div class="tip-row"><i class="dot out"></i>输出<strong>${fmtInt(point.out)}</strong></div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTrend() {
+      setLegendMode('tokens');
+      const points = recentDays().map((day) => ({
+        date: day.date,
+        hit: Number(day.flashCacheHit || 0) + Number(day.proCacheHit || 0),
+        miss: Number(day.flashCacheMiss || 0) + Number(day.proCacheMiss || 0),
+        out: Number(day.flashResponse || 0) + Number(day.proResponse || 0),
+        total: Number(day.flashCacheHit || 0) + Number(day.proCacheHit || 0) + Number(day.flashCacheMiss || 0) + Number(day.proCacheMiss || 0) + Number(day.flashResponse || 0) + Number(day.proResponse || 0)
+      }));
+      renderBars('trendBars', points, 'chartMeta');
+    }
+
+    function renderDetail() {
+      const key = state.detailModel;
+      const isFlash = key === 'flash';
+      const data = modelByKey(key);
+      $('detailTitle').textContent = modelName(key);
+      $('detailCost').textContent = data ? fmtMoney(data.cost) : '—';
+      $('detailRequests').textContent = data ? fmtInt(data.requestCount) : '—';
+      $('detailTokens').textContent = data ? fmtTokensShort(data.totalTokens) : '—';
+      $('detailBadge').textContent = isFlash ? 'F' : 'P';
+      $('detailBadge').className = 'model-badge large ' + key;
+      const points = recentDays().map((day) => {
+        const hit = Number(day[key + 'CacheHit'] || 0);
+        const miss = Number(day[key + 'CacheMiss'] || 0);
+        const out = Number(day[key + 'Response'] || 0);
+        return { date: day.date, hit, miss, out, total: hit + miss + out };
+      });
+      renderBars('detailBars', points, 'detailRange');
+    }
+
+    function renderUsageError(message) {
+      state.usage = null;
+      $('todayCost').textContent = '—';
+      $('monthCost').textContent = '—';
+      renderUsageRows();
+      $('chartMeta').textContent = message || '暂无数据';
+      $('trendBars').innerHTML = '<div class="placeholder" style="grid-column:1/-1;">' + (message || '暂无数据') + '</div>';
+      if (state.view === 'detail') {
+        renderDetail();
+        $('detailRange').textContent = message || '暂无数据';
+        $('detailBars').innerHTML = '<div class="placeholder" style="grid-column:1/-1;">' + (message || '暂无数据') + '</div>';
+      }
+    }
+
+    async function fetchCurrentUsage(includePrevious = true) {
+      const now = new Date();
+      const current = await window.dsAPI.fetchUsage({ month: now.getMonth() + 1, year: now.getFullYear() });
+      if (!current.success) return current;
+      if (!includePrevious) return current;
+      const needPrevious = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getMonth() !== now.getMonth();
+      if (!needPrevious) return current;
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const previous = await window.dsAPI.fetchUsage({ month: prev.getMonth() + 1, year: prev.getFullYear() });
+      if (previous.success) current.data.days = [...(previous.data.days || []), ...(current.data.days || [])];
+      return current;
+    }
+
+    async function refreshAll() {
+      if (state.loading) return;
+      state.loading = true;
+      $('refreshBtn').textContent = '⟳';
+      try {
+        const [balanceResult, usageResult] = await Promise.all([
+          window.dsAPI.fetchBalance(),
+          fetchCurrentUsage(true)
+        ]);
+        renderBalance(balanceResult);
+        if (usageResult.success) {
+          state.usage = usageResult.data;
+          renderUsageRows();
+          renderTrend();
+          if (state.view === 'detail') renderDetail();
+        } else {
+          renderUsageError(usageResult.error || '用量查询失败');
+        }
+        $('lastUpdate').textContent = '最后更新：' + new Date().toLocaleTimeString('zh-CN');
+      } catch (error) {
+        renderUsageError('数据刷新失败');
+      } finally {
+        state.loading = false;
+        $('refreshBtn').textContent = '↻';
+      }
+    }
+
+    function applyConfigToSettings() {
+      const cfg = state.config;
+      $('brandTitle').textContent = 'AI Model Monitor';
+      $('configPath').textContent = cfg.configPath || '—';
+      $('keyState').textContent = cfg.hasApiKey ? '已配置' : '未配置';
+      $('keyState').classList.toggle('off', !cfg.hasApiKey);
+      $('tokenState').textContent = cfg.hasUsageToken ? '已配置' : '未配置';
+      $('tokenState').classList.toggle('off', !cfg.hasUsageToken);
+      $('syncTokenBtn').disabled = false;
+      $('syncTokenBtn').textContent = '网页登录检测';
+      $('toggleManualBtn').disabled = false;
+      $('toggleManualBtn').textContent = '方式二：手动粘贴 Token';
+      $('clearTokenBtn').disabled = !cfg.hasUsageToken;
+      $('tokenMessage').textContent = '自动同步会打开 DeepSeek 登录窗口，登录后自动保存用量 Token。';
+      $('manualTokenBox').style.display = $('manualTokenBox').style.display === 'block' ? 'block' : 'none';
+      $('apiKeyInput').placeholder = cfg.hasApiKey ? '已配置，输入新 Key 可覆盖' : 'sk-...';
+      $('autoLaunchToggle').checked = !!cfg.autoLaunch;
+      $('autoRefreshToggle').checked = cfg.autoRefreshEnabled !== false;
+      for (const btn of $('refreshSegments').querySelectorAll('button')) {
+        btn.classList.toggle('active', Number(btn.dataset.seconds) === Number(cfg.refreshIntervalSeconds || 300));
+      }
+      scheduleAutoRefresh();
+    }
+
+    function scheduleAutoRefresh() {
+      if (state.refreshTimer) window.clearInterval(state.refreshTimer);
+      if (state.config.autoRefreshEnabled === false) return;
+      const seconds = Number(state.config.refreshIntervalSeconds || 300);
+      state.refreshTimer = window.setInterval(refreshAll, seconds * 1000);
+    }
+
+    async function loadConfig() {
+      state.config = await window.dsAPI.getConfig();
+      applyConfigToSettings();
+    }
+
+    async function saveRefreshOptions(patch) {
+      state.config = { ...state.config, ...patch };
+      applyConfigToSettings();
+      const result = await window.dsAPI.saveRefreshOptions({
+        autoRefreshEnabled: state.config.autoRefreshEnabled !== false,
+        refreshIntervalSeconds: state.config.refreshIntervalSeconds || 300
+      });
+      if (result.success) {
+        state.config = { ...state.config, ...result };
+        applyConfigToSettings();
+      }
+    }
+
+    function bindEvents() {
+      $('refreshBtn').addEventListener('click', refreshAll);
+      $('settingsBtn').addEventListener('click', () => showView('settings'));
+      $('backBtn').addEventListener('click', () => showView('dashboard'));
+      $('minBtn').addEventListener('click', () => window.dsAPI.windowMinimize());
+      $('closeBtn').addEventListener('click', () => window.dsAPI.windowClose());
+      document.querySelectorAll('.usage-row').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.detailModel = btn.dataset.model;
+          showView('detail');
+        });
+      });
+      $('saveKeyBtn').addEventListener('click', async () => {
+        const key = $('apiKeyInput').value.trim();
+        if (!key) return;
+        $('keyMessage').textContent = '正在验证...';
+        const result = await window.dsAPI.verifyApiKey(key);
+        if (!result.success) {
+          $('keyMessage').textContent = '验证失败：' + (result.error || ('HTTP ' + (result.status || '')));
+          return;
+        }
+        await window.dsAPI.saveApiKey(key);
+        $('apiKeyInput').value = '';
+        $('keyMessage').textContent = '验证通过，已保存';
+        await loadConfig();
+        refreshAll();
+      });
+      $('clearKeyBtn').addEventListener('click', async () => {
+        await window.dsAPI.clearApiKey();
+        $('keyMessage').textContent = '已清除 API Key';
+        await loadConfig();
+        refreshAll();
+      });
+      $('syncTokenBtn').addEventListener('click', async () => {
+        $('tokenMessage').textContent = '正在打开登录窗口并检测登录状态...';
+        const result = await window.dsAPI.startUsageSync();
+        $('tokenMessage').textContent = result.success
+          ? '登录后会自动检测 Token；如果已经登录，请等待页面加载完成。'
+          : (result.error || '打开登录窗口失败');
+      });
+      $('clearTokenBtn').addEventListener('click', async () => {
+        await window.dsAPI.clearUsageToken();
+        $('tokenMessage').textContent = '已清除用量 Token';
+        await loadConfig();
+        renderUsageError('未配置用量 Token');
+      });
+      $('toggleManualBtn').addEventListener('click', () => {
+        const box = $('manualTokenBox');
+        box.style.display = box.style.display === 'none' ? 'block' : 'none';
+      });
+      $('saveTokenBtn').addEventListener('click', async () => {
+        const token = $('usageTokenInput').value.trim();
+        if (!token) return;
+        $('tokenMessage').textContent = '正在验证用量 Token...';
+        const result = await window.dsAPI.saveUsageToken(token);
+        if (!result.success) {
+          $('tokenMessage').textContent = '保存失败：' + (result.error || 'Token 无效');
+          return;
+        }
+        $('usageTokenInput').value = '';
+        $('tokenMessage').textContent = '已保存，正在刷新用量数据...';
+        await loadConfig();
+        refreshAll();
+      });
+      $('autoLaunchToggle').addEventListener('change', async (event) => {
+        await window.dsAPI.setAutoLaunch(event.target.checked);
+        state.config.autoLaunch = event.target.checked;
+      });
+      $('autoRefreshToggle').addEventListener('change', (event) => {
+        saveRefreshOptions({ autoRefreshEnabled: event.target.checked });
+      });
+      $('refreshSegments').addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-seconds]');
+        if (btn) saveRefreshOptions({ refreshIntervalSeconds: Number(btn.dataset.seconds) });
+      });
+      window.dsAPI.onUsageTokenCaptured(async () => {
+        $('tokenMessage').textContent = '已检测到登录状态并保存 Token';
+        await loadConfig();
+        refreshAll();
+      });
+      window.dsAPI.onUsageSyncEnded(() => {
+        $('tokenMessage').textContent = '登录窗口已关闭，未检测到 Token，可手动保存 Token。';
+      });
+    }
+
+    async function init() {
+      bindEvents();
+      await loadConfig();
+      renderUsageError(state.config.hasUsageToken ? '正在查询用量...' : '未配置用量 Token');
+      await refreshAll();
+    }
+
+    init();
+  </script>
+</body>
+</html>

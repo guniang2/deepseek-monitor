@@ -1,0 +1,57 @@
+{
+  "name": "deepseek-monitor",
+  "version": "1.0.0",
+  "description": "A sleek desktop app for monitoring DeepSeek account balance, API usage, and spending trends in real time",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.deepseek.monitor",
+    "productName": "AI Model Monitor",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-monitor",
+    "monitor",
+    "api-monitor",
+    "balance-checker",
+    "usage-tracker",
+    "electron",
+    "desktop-app"
+  ],
+  "author": "Maxiaowen",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^42.4.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "auto-launch": "^5.0.5",
+    "axios": "^1.6.0",
+    "electron-store": "^8.1.0"
+  }
+}
