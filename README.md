@@ -44,6 +44,10 @@ How to add screenshots:
 
 ## 🚀 Features
 
+- **Balance alerts** — get a system notification when your balance drops below a threshold you set (once per threshold crossing, per account)
+- **Multi-account support** — manage several DeepSeek accounts and switch between them in one click
+- **Encrypted credentials** — API keys and usage tokens are encrypted at rest using your OS keychain (Electron `safeStorage`)
+- **In-app auto-updates** — new releases are detected and installed right from the app
 - **Real-time balance monitoring** — query your DeepSeek account balance with one click; live available amount and account status
 - **Dual-model usage stats** — track token consumption, cache hit rate, and spending for V4 Flash and V4 Pro separately
 - **7-day trend charts** — visualize the last 7 days of token usage, broken down by cache hit / cache miss / output
@@ -166,7 +170,7 @@ Config (API key, usage token, auto-launch, etc.) is stored in `config.json` unde
 - **macOS**: `~/Library/Application Support/deepseek-monitor/config.json`
 - **Linux**: `~/.config/deepseek-monitor/config.json`
 
-> **Security note**: the API key and usage token are stored in plain text locally. Handle your machine accordingly.
+> **Security note**: the API key and usage token are encrypted at rest via the OS keychain (`safeStorage`) on Windows and macOS. On Linux without a keyring they fall back to plain text.
 
 ## 📝 Notes
 

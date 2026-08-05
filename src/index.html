@@ -496,6 +496,20 @@
 
     <section class="view scroll-view settings-panel" id="settingsView">
       <section class="section">
+        <h3>👤 账户管理</h3>
+        <p>支持多个 DeepSeek 账户，数据获取始终针对当前选中的账户。</p>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <select id="accountSelect" style="flex:1;"></select>
+          <button class="secondary" id="deleteAccountBtn" title="删除当前账户" style="min-height:32px;">删除</button>
+        </div>
+        <div class="settings-actions">
+          <input id="newAccountName" placeholder="新账户名称" style="flex:1;">
+          <button class="secondary" id="addAccountBtn">添加账户</button>
+        </div>
+        <p class="faint" id="accountMessage"></p>
+      </section>
+
+      <section class="section">
         <h3>🔑 API Key</h3>
         <p>用于调用 DeepSeek 官方余额接口。</p>
         <p class="faint" id="configPath">—</p>
@@ -552,8 +566,32 @@
       </section>
 
       <section class="section">
+        <h3>💡 余额预警</h3>
+        <p>余额低于阈值时发送系统通知（同一账户只提醒一次，直到余额回升）。</p>
+        <label class="toggle-row">
+          <span>启用余额预警</span>
+          <input type="checkbox" id="budgetAlertToggle">
+          <i></i>
+        </label>
+        <div class="settings-actions">
+          <input id="balanceThresholdInput" type="number" min="0" step="1" placeholder="50" style="width:110px; flex:0 0 auto;">
+          <button class="secondary" id="saveBudgetBtn">保存阈值</button>
+          <span class="faint" id="budgetMessage"></span>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>⬆ 软件更新</h3>
+        <p class="faint" id="updateStatus">检查更新后如有新版本将自动下载。</p>
+        <div class="settings-actions">
+          <button class="primary" id="checkUpdateBtn">检查更新</button>
+          <button class="secondary" id="installUpdateBtn" style="display:none;">重启并安装</button>
+        </div>
+      </section>
+
+      <section class="section">
         <h3>ℹ 关于</h3>
-        <p>AI Model Monitor v1.2.0</p>
+        <p>DeepSeek Monitor v1.1.0</p>
       </section>
     </section>
   </main>
@@ -793,8 +831,9 @@
 
     function applyConfigToSettings() {
       const cfg = state.config;
-      $('brandTitle').textContent = 'AI Model Monitor';
+      $('brandTitle').textContent = 'DeepSeek Monitor';
       $('configPath').textContent = cfg.configPath || '—';
+      renderAccountSelect();
       $('keyState').textContent = cfg.hasApiKey ? '已配置' : '未配置';
       $('keyState').classList.toggle('off', !cfg.hasApiKey);
       $('tokenState').textContent = cfg.hasUsageToken ? '已配置' : '未配置';
@@ -809,10 +848,22 @@
       $('apiKeyInput').placeholder = cfg.hasApiKey ? '已配置，输入新 Key 可覆盖' : 'sk-...';
       $('autoLaunchToggle').checked = !!cfg.autoLaunch;
       $('autoRefreshToggle').checked = cfg.autoRefreshEnabled !== false;
+      $('budgetAlertToggle').checked = cfg.budgetAlertEnabled !== false;
+      $('balanceThresholdInput').value = cfg.balanceThreshold || 50;
       for (const btn of $('refreshSegments').querySelectorAll('button')) {
         btn.classList.toggle('active', Number(btn.dataset.seconds) === Number(cfg.refreshIntervalSeconds || 300));
       }
       scheduleAutoRefresh();
+    }
+
+    function renderAccountSelect() {
+      const select = $('accountSelect');
+      select.innerHTML = (state.config.accounts || []).map((account) =>
+        `<option value="${account.id}">${account.name}${account.hasApiKey ? ' ✓' : ''}</option>`
+      ).join('');
+      select.value = state.config.activeAccountId || '';
+      $('deleteAccountBtn').disabled = (state.config.accounts || []).length <= 1;
+      $('deleteAccountBtn').title = (state.config.accounts || []).length <= 1 ? '至少保留一个账户' : '删除当前账户';
     }
 
     function scheduleAutoRefresh() {
@@ -922,6 +973,75 @@
       });
       window.dsAPI.onUsageSyncEnded(() => {
         $('tokenMessage').textContent = '登录窗口已关闭，未检测到 Token，可手动保存 Token。';
+      });
+
+      // Account management
+      $('accountSelect').addEventListener('change', async (event) => {
+        await window.dsAPI.setActiveAccount(event.target.value);
+        state.config.activeAccountId = event.target.value;
+        renderAccountSelect();
+        await loadConfig();
+        refreshAll();
+      });
+      $('addAccountBtn').addEventListener('click', async () => {
+        const name = $('newAccountName').value.trim();
+        if (!name) { $('accountMessage').textContent = '请输入账户名称'; return; }
+        const result = await window.dsAPI.addAccount(name);
+        if (!result.success) { $('accountMessage').textContent = result.error || '添加失败'; return; }
+        $('newAccountName').value = '';
+        $('accountMessage').textContent = '已添加并切换到新账户';
+        await loadConfig();
+        refreshAll();
+      });
+      $('deleteAccountBtn').addEventListener('click', async () => {
+        const id = state.config.activeAccountId;
+        const name = (state.config.accounts || []).find((a) => a.id === id)?.name || '';
+        if (!window.confirm(`确定删除账户「${name}」？其 API Key 与用量 Token 将一并清除。`)) return;
+        const result = await window.dsAPI.deleteAccount(id);
+        if (!result.success) { $('accountMessage').textContent = result.error || '删除失败'; return; }
+        $('accountMessage').textContent = '账户已删除';
+        await loadConfig();
+        refreshAll();
+      });
+
+      // Budget alert
+      $('budgetAlertToggle').addEventListener('change', async (event) => {
+        const result = await window.dsAPI.saveBudgetOptions({
+          budgetAlertEnabled: event.target.checked,
+          balanceThreshold: $('balanceThresholdInput').value || state.config.balanceThreshold
+        });
+        if (result.success) state.config = { ...state.config, ...result };
+        $('budgetMessage').textContent = event.target.checked ? '预警已启用' : '预警已关闭';
+      });
+      $('saveBudgetBtn').addEventListener('click', async () => {
+        const threshold = Number($('balanceThresholdInput').value);
+        if (!Number.isFinite(threshold) || threshold < 0) { $('budgetMessage').textContent = '请输入有效的阈值'; return; }
+        const result = await window.dsAPI.saveBudgetOptions({
+          budgetAlertEnabled: $('budgetAlertToggle').checked,
+          balanceThreshold: threshold
+        });
+        if (!result.success) { $('budgetMessage').textContent = '保存失败'; return; }
+        state.config = { ...state.config, ...result };
+        $('budgetMessage').textContent = '阈值已保存';
+      });
+
+      // Auto update
+      $('checkUpdateBtn').addEventListener('click', async () => {
+        $('updateStatus').textContent = '正在检查更新...';
+        const result = await window.dsAPI.checkForUpdates();
+        if (!result.success) {
+          $('updateStatus').textContent = result.error || '检查更新失败';
+        }
+      });
+      $('installUpdateBtn').addEventListener('click', () => {
+        window.dsAPI.quitAndInstallUpdate();
+      });
+      window.dsAPI.onUpdateStatus((payload) => {
+        if (!payload) return;
+        $('updateStatus').textContent = payload.message || '';
+        if (payload.status === 'downloaded') {
+          $('installUpdateBtn').style.display = '';
+        }
       });
     }
 

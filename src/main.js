@@ -1,8 +1,10 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, Notification, safeStorage } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const crypto = require('crypto');
 
 // Config storage path
 const configDir = path.join(app.getPath('userData'), 'config.json');
@@ -19,41 +21,164 @@ const DEEPSEEK_PROVIDER = {
 
 // Default config
 let config = {
-  apiKey: '',
-  usageToken: '',
+  accounts: [],
+  activeAccountId: '',
   autoLaunch: false,
   autoRefreshEnabled: true,
   refreshIntervalSeconds: 300,
-  windowBounds: { width: 380, height: 680 }
+  windowBounds: { width: 380, height: 680 },
+  budgetAlertEnabled: true,
+  balanceThreshold: 50,
+  budgetAlertState: {}
 };
 
+// ============ Secret encryption (safeStorage) ============
+// apiKey / usageToken are stored encrypted when the OS keychain is available.
+// Stored format: "enc:v1:<base64>". Plain text is kept as a fallback
+// (e.g. Linux without a keyring), matching previous behavior.
+
+function encryptSecret(plain) {
+  if (!plain) return '';
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      return 'enc:v1:' + safeStorage.encryptString(plain).toString('base64');
+    }
+  } catch (e) {
+    console.error('Encrypt error:', e);
+  }
+  return plain;
+}
+
+function decryptSecret(stored) {
+  if (!stored) return '';
+  if (String(stored).startsWith('enc:v1:')) {
+    try {
+      return safeStorage.decryptString(Buffer.from(stored.slice(7), 'base64'));
+    } catch (e) {
+      console.error('Decrypt error:', e);
+      return '';
+    }
+  }
+  return stored;
+}
+
+// ============ Account helpers ============
+
+function getActiveAccount() {
+  if (!config.accounts.length) return null;
+  let account = config.accounts.find((a) => a.id === config.activeAccountId);
+  if (!account) {
+    account = config.accounts[0];
+    config.activeAccountId = account.id;
+  }
+  return account;
+}
+
+function ensureAccount() {
+  if (!config.accounts.length) {
+    config.accounts.push({ id: crypto.randomUUID(), name: '默认账户', apiKey: '', usageToken: '' });
+    config.activeAccountId = config.accounts[0].id;
+  }
+  return getActiveAccount();
+}
+
+function safeAccount(account) {
+  return {
+    id: account.id,
+    name: account.name,
+    hasApiKey: !!account.apiKey,
+    hasUsageToken: !!account.usageToken
+  };
+}
+
+// Migrate legacy flat config (apiKey/usageToken/providers) to the multi-account shape.
+// Also fills in defaults for newer settings. Returns true when something changed.
 function normalizeConfig() {
-  const oldDeepSeek = config.providers?.deepseek || {};
-  config.apiKey = oldDeepSeek.apiKey || config.apiKey || '';
-  config.usageToken = oldDeepSeek.usageToken || config.usageToken || '';
+  let migrated = false;
+
+  if (!Array.isArray(config.accounts) || config.accounts.length === 0) {
+    const oldDeepSeek = config.providers?.deepseek || {};
+    const legacyKey = config.apiKey || oldDeepSeek.apiKey || '';
+    const legacyToken = config.usageToken || oldDeepSeek.usageToken || '';
+    config.accounts = [{
+      id: crypto.randomUUID(),
+      name: '默认账户',
+      apiKey: legacyKey,
+      usageToken: legacyToken
+    }];
+    delete config.apiKey;
+    delete config.usageToken;
+    migrated = true;
+  }
+
+  if (!config.activeAccountId || !config.accounts.some((a) => a.id === config.activeAccountId)) {
+    config.activeAccountId = config.accounts[0].id;
+    migrated = true;
+  }
+
+  if (config.budgetAlertEnabled === undefined) {
+    config.budgetAlertEnabled = true;
+    migrated = true;
+  }
+  if (config.balanceThreshold === undefined) {
+    config.balanceThreshold = 50;
+    migrated = true;
+  }
+  if (typeof config.budgetAlertState !== 'object' || !config.budgetAlertState) {
+    config.budgetAlertState = {};
+    migrated = true;
+  }
+
   delete config.selectedProvider;
   delete config.providers;
+
+  if (migrated) saveConfig();
+  return migrated;
 }
 
 function getActiveProvider() {
   normalizeConfig();
+  const account = getActiveAccount() || {};
   return {
     ...DEEPSEEK_PROVIDER,
-    apiKey: config.apiKey || '',
-    usageToken: config.usageToken || ''
+    apiKey: account.apiKey || '',
+    usageToken: account.usageToken || ''
   };
 }
 
 function getActiveUsageToken() {
-  return config.usageToken || '';
+  const account = getActiveAccount();
+  return (account && account.usageToken) || '';
 }
 
-// Load config
+// ============ Config load / save ============
+
 function loadConfig() {
   try {
     if (fs.existsSync(configDir)) {
       const data = fs.readFileSync(configDir, 'utf8');
-      config = { ...config, ...JSON.parse(data) };
+      const parsed = JSON.parse(data);
+      config = { ...config, ...parsed };
+      if (Array.isArray(config.accounts)) {
+        // Decrypt stored secrets; flag plain-text leftovers so they get
+        // re-encrypted on the next save.
+        let hasPlainSecret = false;
+        config.accounts = config.accounts.map((a) => {
+          const apiKey = decryptSecret(a.apiKey || '');
+          const usageToken = decryptSecret(a.usageToken || '');
+          if (a.apiKey && !String(a.apiKey).startsWith('enc:v1:')) hasPlainSecret = true;
+          if (a.usageToken && !String(a.usageToken).startsWith('enc:v1:')) hasPlainSecret = true;
+          return {
+            id: a.id || crypto.randomUUID(),
+            name: a.name || '默认账户',
+            apiKey,
+            usageToken
+          };
+        });
+        if (hasPlainSecret) {
+          saveConfig();
+        }
+      }
     }
     normalizeConfig();
   } catch (e) {
@@ -62,16 +187,24 @@ function loadConfig() {
   }
 }
 
-// Save config
 function saveConfig() {
   try {
-    fs.writeFileSync(configDir, JSON.stringify(config, null, 2));
+    const serializable = {
+      ...config,
+      accounts: config.accounts.map((a) => ({
+        ...a,
+        apiKey: encryptSecret(a.apiKey),
+        usageToken: encryptSecret(a.usageToken)
+      }))
+    };
+    fs.writeFileSync(configDir, JSON.stringify(serializable, null, 2));
   } catch (e) {
     console.error('Config save error:', e);
   }
 }
 
-// Auto launch management
+// ============ Auto launch management ============
+
 function setAutoLaunch(enabled) {
   try {
     const appPath = app.getPath('exe');
@@ -128,6 +261,23 @@ function showMainWindow() {
   mainWindow.focus();
 }
 
+function sendToRenderer(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function notify(title, body) {
+  try {
+    if (!Notification.isSupported()) return;
+    const notification = new Notification({ title, body });
+    notification.on('click', () => showMainWindow());
+    notification.show();
+  } catch (e) {
+    console.error('Notification error:', e);
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 380,
@@ -176,7 +326,7 @@ function createTray() {
   if (tray) return;
 
   const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
-  
+
   let trayIcon;
   if (fs.existsSync(iconPath)) {
     trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
@@ -205,10 +355,44 @@ function createTray() {
   });
 }
 
+// ============ Auto updater ============
+
+function initAutoUpdater() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', () => {
+    sendToRenderer('update-status', { status: 'available', message: '发现新版本，正在下载...' });
+  });
+  autoUpdater.on('update-not-available', () => {
+    sendToRenderer('update-status', { status: 'not-available', message: '已是最新版本' });
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    sendToRenderer('update-status', {
+      status: 'downloading',
+      percent: Math.round(progress.percent || 0),
+      message: '正在下载更新...'
+    });
+  });
+  autoUpdater.on('update-downloaded', () => {
+    sendToRenderer('update-status', { status: 'downloaded', message: '新版本已下载，重启后生效' });
+    notify('DeepSeek Monitor 更新', '新版本已下载，重启应用即可完成更新');
+  });
+  autoUpdater.on('error', (error) => {
+    sendToRenderer('update-status', { status: 'error', message: '更新失败：' + (error.message || error) });
+  });
+}
+
 app.whenReady().then(() => {
+  app.setAppUserModelId('com.deepseek.monitor');
   loadConfig();
   createWindow();
   createTray();
+  initAutoUpdater();
+  // Background update check on startup (silent, packaged builds only)
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -336,6 +520,29 @@ function getBalanceTotals(rawData) {
   const voucherBalance = infos.reduce((sum, item) => sum + Number(item.voucher_balance || item.granted_balance || 0), 0);
   const cashBalance = infos.reduce((sum, item) => sum + Number(item.cash_balance || item.topped_up_balance || 0), 0);
   return { totalBalance, voucherBalance, cashBalance, normalized };
+}
+
+// ============ Budget alerts ============
+
+function maybeAlertLowBalance(account, total) {
+  if (config.budgetAlertEnabled === false || !account) return;
+  const threshold = Number(config.balanceThreshold || 0);
+  const value = Number(total);
+  if (!(threshold > 0) || !Number.isFinite(value)) return;
+
+  const stateKey = account.id;
+  const prev = config.budgetAlertState[stateKey] || 'ok';
+  if (value < threshold && prev !== 'below') {
+    config.budgetAlertState[stateKey] = 'below';
+    saveConfig();
+    notify(
+      '余额预警',
+      `账户「${account.name}」余额 ¥${value.toFixed(2)} 已低于阈值 ¥${threshold}`
+    );
+  } else if (value >= threshold && prev === 'below') {
+    config.budgetAlertState[stateKey] = 'ok';
+    saveConfig();
+  }
 }
 
 function requestJsonUrl(targetUrl, token, options = {}) {
@@ -625,7 +832,8 @@ function maybeCaptureUsageToken(authHeader) {
   verifyUsageTokenValue(token).then((valid) => {
     if (!valid || usageTokenCaptured) return;
     usageTokenCaptured = true;
-    config.usageToken = token;
+    const account = ensureAccount();
+    account.usageToken = token;
     saveConfig();
 
     if (mainWindow) {
@@ -724,50 +932,86 @@ function startUsageSyncWindow() {
 
 // Get config
 ipcMain.handle('get-config', () => {
-  const activeProvider = getActiveProvider();
+  normalizeConfig();
+  const account = getActiveAccount();
   return {
-    apiKey: activeProvider.apiKey,
-    usageToken: getActiveUsageToken() ? '***configured***' : '',
+    accounts: config.accounts.map(safeAccount),
+    activeAccountId: config.activeAccountId,
     autoLaunch: config.autoLaunch,
     autoRefreshEnabled: config.autoRefreshEnabled !== false,
     refreshIntervalSeconds: config.refreshIntervalSeconds || 300,
-    activeProvider,
-    hasApiKey: !!activeProvider.apiKey,
-    hasUsageToken: !!getActiveUsageToken(),
+    budgetAlertEnabled: config.budgetAlertEnabled !== false,
+    balanceThreshold: config.balanceThreshold || 50,
+    packaged: app.isPackaged,
+    hasApiKey: !!(account && account.apiKey),
+    hasUsageToken: !!(account && account.usageToken),
     configPath: configDir
   };
 });
 
-// Save API key
-ipcMain.handle('save-api-key', async (event, apiKey) => {
-  config.apiKey = apiKey;
+// Multi-account management
+ipcMain.handle('add-account', (event, name) => {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return { success: false, error: '账户名称不能为空' };
+  const account = { id: crypto.randomUUID(), name: trimmed.slice(0, 30), apiKey: '', usageToken: '' };
+  config.accounts.push(account);
+  config.activeAccountId = account.id;
+  saveConfig();
+  return { success: true, account: safeAccount(account) };
+});
+
+ipcMain.handle('delete-account', (event, id) => {
+  if (config.accounts.length <= 1) return { success: false, error: '至少保留一个账户' };
+  const index = config.accounts.findIndex((a) => a.id === id);
+  if (index < 0) return { success: false, error: '账户不存在' };
+  config.accounts.splice(index, 1);
+  if (config.activeAccountId === id) config.activeAccountId = config.accounts[0].id;
+  delete config.budgetAlertState[id];
   saveConfig();
   return { success: true };
 });
 
-// Save usage token
+ipcMain.handle('set-active-account', (event, id) => {
+  if (!config.accounts.some((a) => a.id === id)) return { success: false, error: '账户不存在' };
+  config.activeAccountId = id;
+  saveConfig();
+  return { success: true };
+});
+
+// Save API key (active account)
+ipcMain.handle('save-api-key', async (event, apiKey) => {
+  const account = ensureAccount();
+  account.apiKey = String(apiKey || '').trim();
+  saveConfig();
+  return { success: true };
+});
+
+// Save usage token (active account)
 ipcMain.handle('save-usage-token', async (event, token) => {
   normalizeConfig();
   const value = String(token || '').trim();
   if (!value) return { success: false, error: '用量 Token 不能为空' };
   const valid = await verifyUsageTokenValue(value);
   if (!valid) return { success: false, error: '用量 Token 无效或已过期，请重新获取' };
-  config.usageToken = value;
+  const account = ensureAccount();
+  account.usageToken = value;
   saveConfig();
   return { success: true };
 });
 
-// Clear API key
+// Clear API key (active account)
 ipcMain.handle('clear-api-key', () => {
-  config.apiKey = '';
+  const account = ensureAccount();
+  account.apiKey = '';
   saveConfig();
   return { success: true };
 });
 
-// Clear usage token
+// Clear usage token (active account)
 ipcMain.handle('clear-usage-token', () => {
   normalizeConfig();
-  config.usageToken = '';
+  const account = ensureAccount();
+  account.usageToken = '';
   saveConfig();
   return { success: true };
 });
@@ -790,6 +1034,19 @@ ipcMain.handle('save-refresh-options', (event, options = {}) => {
   };
 });
 
+// Budget alert options
+ipcMain.handle('save-budget-options', (event, options = {}) => {
+  config.budgetAlertEnabled = options.budgetAlertEnabled !== false;
+  const threshold = Number(options.balanceThreshold);
+  config.balanceThreshold = Number.isFinite(threshold) && threshold >= 0 ? threshold : 50;
+  saveConfig();
+  return {
+    success: true,
+    budgetAlertEnabled: config.budgetAlertEnabled,
+    balanceThreshold: config.balanceThreshold
+  };
+});
+
 // Window controls
 ipcMain.handle('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.handle('window-close', () => { if (mainWindow) mainWindow.hide(); });
@@ -808,6 +1065,11 @@ ipcMain.handle('fetch-balance', async () => {
   if (!provider.balancePath) return { success: false, unsupported: true, error: 'DeepSeek 未配置余额接口' };
   const result = await requestProvider(provider.balancePath);
   if (!result.success) return result;
+  const account = getActiveAccount();
+  if (account) {
+    const totals = getBalanceTotals(result.data);
+    maybeAlertLowBalance(account, totals.totalBalance);
+  }
   return { ...result, data: normalizeBalance(result.data) };
 });
 
@@ -837,3 +1099,19 @@ ipcMain.handle('open-browser-login', async () => {
 });
 
 ipcMain.handle('start-usage-sync', async () => startUsageSyncWindow());
+
+// Auto update
+ipcMain.handle('check-for-updates', async () => {
+  if (!app.isPackaged) return { success: false, error: '开发模式不支持自动更新，请使用安装版' };
+  try {
+    await autoUpdater.checkForUpdates();
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message || '检查更新失败' };
+  }
+});
+
+ipcMain.handle('quit-and-install-update', () => {
+  autoUpdater.quitAndInstall();
+  return { success: true };
+});

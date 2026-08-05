@@ -22,7 +22,7 @@ You'll receive a response as soon as possible. Please allow time for a fix befor
 
 Things that matter most for this project:
 
-- **Credential handling** — API keys, usage tokens, and anything in `config.json` (currently stored in plain text by design; see the README security note)
+- **Credential handling** — API keys and usage tokens are encrypted at rest via Electron `safeStorage` (OS keychain); on Linux without a keyring they fall back to plain text. Anything touching encryption/decryption (`src/main.js` `encryptSecret`/`decryptSecret`) deserves extra scrutiny
 - **The token-capture flow** — the in-app login window that reads `Authorization` headers; a bug here could leak tokens
 - **IPC boundary** — anything the renderer can trigger in the main process (`src/main.js` + `src/preload.js`)
 - **Dependency supply chain** — dependencies are limited to Electron tooling; review updates carefully

@@ -44,6 +44,10 @@ DeepSeek 官方平台的余额和用量分散在不同页面，用量看板甚�
 
 ## 🚀 功能特性
 
+- **余额预警** — 余额低于设定阈值时发送系统通知（每个账户每个阈值只提醒一次，余额回升后重置）
+- **多账户支持** — 管理多个 DeepSeek 账户，一键切换
+- **凭证加密存储** — API Key 与用量 Token 使用系统钥匙串加密保存（Electron `safeStorage`）
+- **应用内自动更新** — 在设置页检查更新，新版本自动下载安装
 - **余额实时监控** — 一键查询 DeepSeek 账户余额，实时显示可用金额与账户状态
 - **双模型用量统计** — 分别追踪 V4 Flash 与 V4 Pro 模型的 Token 消耗、缓存命中率及消费金额
 - **7 日趋势图表** — 可视化展示最近 7 天的 Token 使用趋势，支持命中缓存 / 未命中缓存 / 输出三项细分
@@ -166,7 +170,7 @@ deepseek-monitor/
 - **macOS**: `~/Library/Application Support/deepseek-monitor/config.json`
 - **Linux**: `~/.config/deepseek-monitor/config.json`
 
-> **安全提示**：API Key 与 Usage Token 均以明文形式存储在本地配置文件中，请妥善保管。
+> **安全提示**：API Key 与用量 Token 在 Windows / macOS 上通过系统钥匙串（`safeStorage`）加密存储；Linux 无钥匙串时回退为明文保存。
 
 ## 📝 注意事项
 
