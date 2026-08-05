@@ -28,18 +28,17 @@ DeepSeek 官方平台的余额和用量分散在不同页面，用量看板甚�
 
 ## 📸 界面预览
 
-> 想要添加截图？把截图放到 `assets/screenshots/` 目录并填入下面的图片即可。有截图会让 README 看起来好得多——方法如下：
-
 <p align="center">
-  <!-- <img src="assets/screenshots/dashboard.png" alt="仪表盘" width="360" /> -->
-  <!-- <img src="assets/screenshots/details.png" alt="用量详情" width="360" /> -->
+  <img src="assets/screenshots/dashboard.jpg" alt="DeepSeek Monitor 仪表盘" width="640" />
 </p>
+
+> 想添加更多截图（如模型详情页）？把截图放到 `assets/screenshots/` 目录并按下面的方法添加：
 
 <!--
 如何添加截图：
 1. 打开应用，按 PrintScreen（Windows 可用 Win+Shift+S，macOS 可用 Cmd+Shift+4）
 2. 分别截取主仪表盘和模型详情视图
-3. 保存到 assets/screenshots/ 目录，命名为 dashboard.png 和 details.png
+3. 保存到 assets/screenshots/ 目录，命名为 dashboard.jpg 和 details.jpg
 4. 取消上方两行的注释
 -->
 

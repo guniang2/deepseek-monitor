@@ -28,18 +28,17 @@ The official DeepSeek platform shows your balance and usage scattered across dif
 
 ## 📸 Screenshots
 
-> Want to add your screenshots? Drop them in `assets/screenshots/` and fill in the images below. The README will look much better with them — here's how:
-
 <p align="center">
-  <!-- <img src="assets/screenshots/dashboard.png" alt="Dashboard" width="360" /> -->
-  <!-- <img src="assets/screenshots/details.png" alt="Usage details" width="360" /> -->
+  <img src="assets/screenshots/dashboard.jpg" alt="DeepSeek Monitor dashboard" width="640" />
 </p>
+
+> Want to add more screenshots (e.g. the model details view)? Drop them in `assets/screenshots/` and add them below:
 
 <!--
 How to add screenshots:
 1. Open the app, press PrintScreen (or use Win+Shift+S on Windows / Cmd+Shift+4 on macOS)
 2. Crop the main dashboard and the model details view
-3. Save them to assets/screenshots/ as dashboard.png and details.png
+3. Save them to assets/screenshots/ as dashboard.jpg and details.jpg
 4. Uncomment the two lines above
 -->
 
