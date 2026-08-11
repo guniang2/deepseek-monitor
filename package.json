@@ -34,7 +34,7 @@
     },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/icon.png"
+      "icon": "build/icons"
     },
     "nsis": {
       "oneClick": false,
