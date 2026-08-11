@@ -51,7 +51,10 @@
     "electron",
     "desktop-app"
   ],
-  "author": "Maxiaowen",
+  "author": {
+    "name": "Maxiaowen",
+    "email": "leej95@163.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "electron": "^42.4.0",
