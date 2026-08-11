@@ -21,7 +21,7 @@ jobs:
           - os: macos-latest
             args: --mac dmg zip
           - os: ubuntu-latest
-            args: --linux AppImage
+            args: --linux AppImage deb
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -52,5 +52,6 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.AppImage
+            dist/*.deb
             dist/latest*.yml
           if-no-files-found: ignore
