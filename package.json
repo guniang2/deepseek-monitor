@@ -1,6 +1,6 @@
 {
   "name": "deepseek-monitor",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A sleek desktop app for monitoring DeepSeek account balance, API usage, and spending trends in real time",
   "main": "src/main.js",
   "scripts": {
@@ -51,13 +51,17 @@
     "electron",
     "desktop-app"
   ],
-  "author": "Maxiaowen",
+  "author": {
+    "name": "Maxiaowen",
+    "email": "leej95@163.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "electron": "^42.4.0",
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "electron-updater": "^6.6.2"
+    "electron-updater": "^6.6.2",
+    "x11": "^3.9.0"
   }
 }

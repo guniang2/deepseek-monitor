@@ -349,6 +349,27 @@
       outline: none;
     }
     input:focus, select:focus { border-color: rgba(77,107,254,0.72); }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      outline: none;
+    }
+    input[type="range"]:focus { border-color: transparent; }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.28);
+      background: var(--brand-soft);
+      cursor: pointer;
+    }
     .settings-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
     .primary, .secondary, .link {
       border: 0;
@@ -551,6 +572,32 @@
       </section>
 
       <section class="section">
+        <h3>📌 窗口置顶</h3>
+        <p>应用始终驻留系统托盘，不显示任务栏/Dock 图标；开启置顶后窗口悬浮于其他应用之上。</p>
+        <label class="toggle-row">
+          <span>启用窗口置顶</span>
+          <input type="checkbox" id="alwaysOnTopToggle">
+          <i></i>
+        </label>
+        <div id="onTopOptions" style="display:none; margin-top:10px;">
+          <p>鼠标悬停在窗口上时：</p>
+          <div class="segmented" id="onTopBehaviorSegments" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+            <button data-behavior="none">保持原样</button>
+            <button data-behavior="hide">自动隐藏</button>
+            <button data-behavior="fade">半透明</button>
+          </div>
+          <div id="opacityRow" style="display:none; margin-top:12px;">
+            <div style="display:flex; justify-content:space-between; color:var(--muted); font-size:11px; font-weight:900; margin-bottom:6px;">
+              <span>半透明透明度</span>
+              <span id="opacityValue">35%</span>
+            </div>
+            <input type="range" id="opacityRange" min="10" max="90" step="5" value="35">
+          </div>
+          <p class="faint">鼠标移开后自动恢复为不透明；悬停期间窗口可点击穿透，不遮挡桌面操作。</p>
+        </div>
+      </section>
+
+      <section class="section">
         <h3>↻ 自动刷新</h3>
         <label class="toggle-row">
           <span>启用自动刷新</span>
@@ -591,7 +638,7 @@
 
       <section class="section">
         <h3>ℹ 关于</h3>
-        <p>DeepSeek Monitor v1.1.0</p>
+        <p>DeepSeek Monitor v1.2.0</p>
       </section>
     </section>
   </main>
@@ -850,6 +897,19 @@
       $('autoRefreshToggle').checked = cfg.autoRefreshEnabled !== false;
       $('budgetAlertToggle').checked = cfg.budgetAlertEnabled !== false;
       $('balanceThresholdInput').value = cfg.balanceThreshold || 50;
+      const onTopBehavior = cfg.alwaysOnTop ? (cfg.alwaysOnTopBehavior || 'none') : 'none';
+      $('alwaysOnTopToggle').checked = !!cfg.alwaysOnTop;
+      $('onTopOptions').style.display = cfg.alwaysOnTop ? '' : 'none';
+      for (const btn of $('onTopBehaviorSegments').querySelectorAll('button')) {
+        btn.classList.toggle('active', btn.dataset.behavior === onTopBehavior);
+      }
+      const opacityPercent = String(Math.round(Number(cfg.alwaysOnTopOpacity) * 100) || 35);
+      $('opacityRange').value = opacityPercent;
+      $('opacityValue').textContent = opacityPercent + '%';
+      $('opacityRow').style.display = onTopBehavior === 'fade' ? '' : 'none';
+      if (onTopBehavior === 'none') {
+        document.body.style.opacity = '1';
+      }
       for (const btn of $('refreshSegments').querySelectorAll('button')) {
         btn.classList.toggle('active', Number(btn.dataset.seconds) === Number(cfg.refreshIntervalSeconds || 300));
       }
@@ -886,6 +946,16 @@
         refreshIntervalSeconds: state.config.refreshIntervalSeconds || 300
       });
       if (result.success) {
+        state.config = { ...state.config, ...result };
+        applyConfigToSettings();
+      }
+    }
+
+    async function saveWindowOptions(patch) {
+      state.config = { ...state.config, ...patch };
+      applyConfigToSettings();
+      const result = await window.dsAPI.saveWindowOptions(patch);
+      if (result && result.success) {
         state.config = { ...state.config, ...result };
         applyConfigToSettings();
       }
@@ -965,6 +1035,27 @@
       $('refreshSegments').addEventListener('click', (event) => {
         const btn = event.target.closest('button[data-seconds]');
         if (btn) saveRefreshOptions({ refreshIntervalSeconds: Number(btn.dataset.seconds) });
+      });
+      $('alwaysOnTopToggle').addEventListener('change', (event) => {
+        saveWindowOptions({ alwaysOnTop: event.target.checked });
+      });
+      $('onTopBehaviorSegments').addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-behavior]');
+        if (btn) saveWindowOptions({ alwaysOnTopBehavior: btn.dataset.behavior });
+      });
+      $('opacityRange').addEventListener('input', () => {
+        $('opacityValue').textContent = $('opacityRange').value + '%';
+      });
+      $('opacityRange').addEventListener('change', () => {
+        saveWindowOptions({ alwaysOnTopOpacity: Number($('opacityRange').value) / 100 });
+      });
+      window.dsAPI.onWindowHoverState((payload) => {
+        if (payload && typeof payload.opacity === 'number') {
+          document.body.style.opacity = String(payload.opacity);
+        }
+      });
+      window.dsAPI.onWindowShown(() => {
+        document.body.style.opacity = '1';
       });
       window.dsAPI.onUsageTokenCaptured(async () => {
         $('tokenMessage').textContent = '已检测到登录状态并保存 Token';

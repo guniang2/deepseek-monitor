@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-11
+
+### Added
+
+- **Always-on-top widget mode** — pin the window above other apps from Settings or the tray menu; the app is tray-only and never shows a taskbar/Dock icon
+- **Hover auto-hide / fade** — when always-on-top is enabled, hovering over the window auto-hides or fades it to a preset opacity (click-through, so it never blocks the desktop) and it restores once the mouse moves away
+- **Tray menu controls** — toggle always-on-top, choose the mouse-leave behavior, and pick the fade opacity directly from the tray context menu
+
+### Changed
+
+- Minimizing the window now hides it to the tray so no taskbar icon remains
+- Hover detection on Linux queries the X server directly for the real cursor position (Electron's cached cursor API is unreliable there); Windows and macOS use the built-in API
+
 ## [1.1.0] - 2026-08-05
 
 ### Added
