@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('dsAPI', {
   setAutoLaunch: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled),
   saveRefreshOptions: (options) => ipcRenderer.invoke('save-refresh-options', options),
   saveBudgetOptions: (options) => ipcRenderer.invoke('save-budget-options', options),
+  saveWindowOptions: (options) => ipcRenderer.invoke('save-window-options', options),
   verifyApiKey: (key) => ipcRenderer.invoke('verify-api-key', key),
   fetchBalance: () => ipcRenderer.invoke('fetch-balance'),
   fetchModels: () => ipcRenderer.invoke('fetch-models'),
@@ -34,6 +35,16 @@ contextBridge.exposeInMainWorld('dsAPI', {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on('update-status', handler);
     return () => ipcRenderer.removeListener('update-status', handler);
+  },
+  onWindowShown: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('window-shown', handler);
+    return () => ipcRenderer.removeListener('window-shown', handler);
+  },
+  onWindowHoverState: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('window-hover-state', handler);
+    return () => ipcRenderer.removeListener('window-hover-state', handler);
   },
   windowMinimize: () => ipcRenderer.invoke('window-minimize'),
   windowClose: () => ipcRenderer.invoke('window-close'),

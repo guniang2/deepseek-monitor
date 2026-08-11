@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, Notification, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, Notification, safeStorage, screen } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -29,7 +29,10 @@ let config = {
   windowBounds: { width: 380, height: 680 },
   budgetAlertEnabled: true,
   balanceThreshold: 50,
-  budgetAlertState: {}
+  budgetAlertState: {},
+  alwaysOnTop: false,
+  alwaysOnTopBehavior: 'none', // 'none' | 'hide' | 'fade'
+  alwaysOnTopOpacity: 0.35
 };
 
 // ============ Secret encryption (safeStorage) ============
@@ -127,6 +130,21 @@ function normalizeConfig() {
   if (typeof config.budgetAlertState !== 'object' || !config.budgetAlertState) {
     config.budgetAlertState = {};
     migrated = true;
+  }
+  if (config.alwaysOnTop === undefined) {
+    config.alwaysOnTop = false;
+    migrated = true;
+  }
+  if (!['none', 'hide', 'fade'].includes(config.alwaysOnTopBehavior)) {
+    config.alwaysOnTopBehavior = 'none';
+    migrated = true;
+  }
+  const onTopOpacity = Number(config.alwaysOnTopOpacity);
+  if (!Number.isFinite(onTopOpacity)) {
+    config.alwaysOnTopOpacity = 0.35;
+    migrated = true;
+  } else {
+    config.alwaysOnTopOpacity = Math.min(1, Math.max(0.05, Math.round(onTopOpacity * 100) / 100));
   }
 
   delete config.selectedProvider;
@@ -253,12 +271,209 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 
+// Always-on-top level: 'screen-saver' stays above almost everything on
+// Windows/macOS; Linux only supports 'normal'/'floating'.
+const ON_TOP_LEVEL = process.platform === 'linux' ? 'floating' : 'screen-saver';
+
 function showMainWindow() {
   if (!mainWindow) createWindow();
   if (!mainWindow) return;
-  mainWindow.show();
   if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
   mainWindow.focus();
+  sendToRenderer('window-shown');
+}
+
+function getAppIconPath() {
+  return path.join(__dirname, '..', 'assets', 'icon.png');
+}
+
+function applyWindowPolicy() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const onTop = !!config.alwaysOnTop;
+  try {
+    mainWindow.setAlwaysOnTop(onTop, onTop ? ON_TOP_LEVEL : undefined);
+  } catch (e) {
+    console.error('setAlwaysOnTop error:', e);
+  }
+  // 完全取消任务栏/Dock 图标：应用始终驻留系统托盘
+  mainWindow.setSkipTaskbar(true);
+  applyLinuxSkipTaskbar();
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.hide();
+  }
+  syncHoverBehavior();
+}
+
+function saveWindowOptions(options = {}) {
+  if (typeof options.alwaysOnTop === 'boolean') config.alwaysOnTop = options.alwaysOnTop;
+  if (['none', 'hide', 'fade'].includes(options.alwaysOnTopBehavior)) {
+    config.alwaysOnTopBehavior = options.alwaysOnTopBehavior;
+  }
+  if (options.alwaysOnTopOpacity !== undefined) {
+    const opacity = Number(options.alwaysOnTopOpacity);
+    if (Number.isFinite(opacity)) {
+      config.alwaysOnTopOpacity = Math.min(1, Math.max(0.05, Math.round(opacity * 100) / 100));
+    }
+  }
+  saveConfig();
+  applyWindowPolicy();
+  if (tray) tray.setContextMenu(buildTrayMenu());
+  return {
+    success: true,
+    alwaysOnTop: !!config.alwaysOnTop,
+    alwaysOnTopBehavior: config.alwaysOnTopBehavior || 'none',
+    alwaysOnTopOpacity: Number(config.alwaysOnTopOpacity) || 0.35
+  };
+}
+
+// ============ Always-on-top hover behavior ============
+// When always-on-top is enabled the window stays fully visible until the
+// cursor moves over it: it then auto-hides or fades to a preset opacity and
+// becomes click-through, so it never blocks what's underneath. It restores
+// as soon as the cursor leaves the window bounds. The cursor is polled
+// because a click-through window stops receiving DOM mouse events.
+
+let hoverPollTimer = null;
+let hoverInsideSince = 0;
+let hoverStateActive = false;
+let hoverAppliedOpacity = null;
+const HOVER_ACTIVATE_DELAY_MS = 250;
+const HOVER_POLL_INTERVAL_MS = 150;
+
+// On Linux, Electron's screen.getCursorScreenPoint() can return a stale
+// cached position, so query the X server directly (pure-JS x11 client).
+let x11PointerQuery = null;
+let x11Display = null;
+
+function initX11PointerQuery() {
+  if (x11PointerQuery || process.platform !== 'linux') return true;
+  try {
+    const x11 = require('x11');
+    x11.createClient((err, display) => {
+      if (err || !display) {
+        console.error('X11 client error:', err);
+        x11PointerQuery = null;
+        return;
+      }
+      x11Display = display;
+      const root = display.screen[0].root;
+      x11PointerQuery = (callback) => {
+        display.client.QueryPointer(root, (qerr, ptr) => {
+          if (qerr) return callback(qerr);
+          callback(null, { x: ptr.rootX, y: ptr.rootY });
+        });
+      };
+      applyLinuxSkipTaskbar();
+    });
+    return true;
+  } catch (e) {
+    console.error('X11 pointer init error:', e);
+    return false;
+  }
+}
+
+// Electron's setSkipTaskbar() does not set _NET_WM_STATE_SKIP_TASKBAR on all
+// Linux environments, so send the EWMH client message directly to the window
+// manager to keep the window out of the taskbar / dock.
+function applyLinuxSkipTaskbar() {
+  if (process.platform !== 'linux') return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  initX11PointerQuery();
+  const client = x11Display && x11Display.client;
+  if (!client) return;
+  const wid = mainWindow.getNativeWindowHandle().readUInt32LE(0);
+  const root = x11Display.screen[0].root;
+  client.InternAtom(false, '_NET_WM_STATE', (err, stateAtom) => {
+    if (err || !stateAtom) return;
+    client.InternAtom(false, '_NET_WM_STATE_SKIP_TASKBAR', (err2, skipAtom) => {
+      if (err2 || !skipAtom) return;
+      // EWMH _NET_WM_STATE: action=1 (ADD), state, 0, source=1 (application), 0
+      client.SendClientMessage(root, wid, stateAtom, 32, [1, skipAtom, 0, 1, 0], () => {});
+    });
+  });
+}
+
+function queryPointerPosition(callback) {
+  if (process.platform === 'linux') {
+    initX11PointerQuery();
+    if (!x11PointerQuery) {
+      // Connection not ready yet: fall back to Electron for this tick
+      callback(null, screen.getCursorScreenPoint());
+      return;
+    }
+    x11PointerQuery(callback);
+    return;
+  }
+  callback(null, screen.getCursorScreenPoint());
+}
+
+function getHoverTargetOpacity() {
+  if (!config.alwaysOnTop) return 1;
+  if (config.alwaysOnTopBehavior === 'hide') return 0;
+  if (config.alwaysOnTopBehavior === 'fade') return Number(config.alwaysOnTopOpacity) || 0.35;
+  return 1;
+}
+
+function applyHoverState(inside) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const opacity = inside ? getHoverTargetOpacity() : 1;
+  if (inside === hoverStateActive && opacity === hoverAppliedOpacity) return;
+  mainWindow.setIgnoreMouseEvents(inside);
+  sendToRenderer('window-hover-state', { inside, opacity });
+  hoverStateActive = inside;
+  hoverAppliedOpacity = opacity;
+}
+
+function pollHoverState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow.isVisible()) {
+    hoverInsideSince = 0;
+    if (hoverStateActive) applyHoverState(false);
+    return;
+  }
+  queryPointerPosition((err, point) => {
+    if (err || !point || !mainWindow || mainWindow.isDestroyed()) return;
+    let bounds = mainWindow.getBounds();
+    if (process.platform === 'linux' && x11PointerQuery) {
+      // XQueryPointer returns physical pixels; convert DIP bounds via scale
+      const scale = screen.getDisplayMatching(bounds).scaleFactor || 1;
+      bounds = {
+        x: bounds.x * scale,
+        y: bounds.y * scale,
+        width: bounds.width * scale,
+        height: bounds.height * scale
+      };
+    }
+    const inside = point.x >= bounds.x && point.x <= bounds.x + bounds.width &&
+                   point.y >= bounds.y && point.y <= bounds.y + bounds.height;
+    if (inside) {
+      if (!hoverInsideSince) hoverInsideSince = Date.now();
+      if (Date.now() - hoverInsideSince >= HOVER_ACTIVATE_DELAY_MS) {
+        applyHoverState(true);
+      }
+    } else {
+      hoverInsideSince = 0;
+      applyHoverState(false);
+    }
+  });
+}
+
+function syncHoverBehavior() {
+  if (hoverPollTimer) {
+    clearInterval(hoverPollTimer);
+    hoverPollTimer = null;
+  }
+  const active = !!config.alwaysOnTop && ['hide', 'fade'].includes(config.alwaysOnTopBehavior);
+  if (!active) {
+    hoverInsideSince = 0;
+    if (hoverStateActive) applyHoverState(false);
+    else sendToRenderer('window-hover-state', { inside: false, opacity: 1 });
+    return;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  pollHoverState();
+  hoverPollTimer = setInterval(pollHoverState, HOVER_POLL_INTERVAL_MS);
 }
 
 function sendToRenderer(channel, payload) {
@@ -288,6 +503,7 @@ function createWindow() {
     transparent: true,
     resizable: true,
     skipTaskbar: true,
+    icon: getAppIconPath(),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -301,13 +517,24 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
+  if (process.platform !== 'darwin') {
+    const winIcon = nativeImage.createFromPath(getAppIconPath());
+    if (!winIcon.isEmpty()) mainWindow.setIcon(winIcon);
+  }
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    applyLinuxSkipTaskbar();
   });
 
   mainWindow.on('close', (event) => {
     if (isQuitting) return;
     event.preventDefault();
+    mainWindow.hide();
+  });
+
+  mainWindow.on('minimize', () => {
+    // 最小化后隐藏到托盘，确保任务栏不残留图标
     mainWindow.hide();
   });
 
@@ -319,6 +546,8 @@ function createWindow() {
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+
+  applyWindowPolicy();
 }
 
 // Create tray icon
@@ -336,9 +565,45 @@ function createTray() {
 
   tray = new Tray(trayIcon);
   tray.setToolTip('DeepSeek Monitor');
+  tray.setContextMenu(buildTrayMenu());
+  tray.on('click', () => {
+    showMainWindow();
+  });
+}
 
-  const contextMenu = Menu.buildFromTemplate([
+function buildTrayMenu() {
+  const onTop = !!config.alwaysOnTop;
+  const behavior = onTop ? (config.alwaysOnTopBehavior || 'none') : 'none';
+  const opacity = Number(config.alwaysOnTopOpacity) || 0.35;
+  const close = (v) => Math.abs(opacity - v) < 0.001;
+  return Menu.buildFromTemplate([
     { label: '显示主窗口', click: showMainWindow },
+    { type: 'separator' },
+    {
+      label: '窗口置顶',
+      type: 'checkbox',
+      checked: onTop,
+      click: (item) => saveWindowOptions({ alwaysOnTop: item.checked })
+    },
+    {
+      label: '置顶后鼠标悬停',
+      enabled: onTop,
+      submenu: [
+        { label: '保持原样', type: 'radio', checked: behavior === 'none', click: () => saveWindowOptions({ alwaysOnTopBehavior: 'none' }) },
+        { label: '自动隐藏', type: 'radio', checked: behavior === 'hide', click: () => saveWindowOptions({ alwaysOnTopBehavior: 'hide' }) },
+        { label: '半透明', type: 'radio', checked: behavior === 'fade', click: () => saveWindowOptions({ alwaysOnTopBehavior: 'fade' }) }
+      ]
+    },
+    {
+      label: '半透明透明度',
+      enabled: onTop && behavior === 'fade',
+      submenu: [
+        { label: '20%', type: 'radio', checked: close(0.2), click: () => saveWindowOptions({ alwaysOnTopOpacity: 0.2 }) },
+        { label: '35%', type: 'radio', checked: close(0.35), click: () => saveWindowOptions({ alwaysOnTopOpacity: 0.35 }) },
+        { label: '50%', type: 'radio', checked: close(0.5), click: () => saveWindowOptions({ alwaysOnTopOpacity: 0.5 }) },
+        { label: '70%', type: 'radio', checked: close(0.7), click: () => saveWindowOptions({ alwaysOnTopOpacity: 0.7 }) }
+      ]
+    },
     { type: 'separator' },
     {
       label: '退出',
@@ -348,11 +613,6 @@ function createTray() {
       }
     }
   ]);
-
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => {
-    showMainWindow();
-  });
 }
 
 // ============ Auto updater ============
@@ -401,6 +661,9 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  if (x11Display && x11Display.client && typeof x11Display.client.terminate === 'function') {
+    try { x11Display.client.terminate(); } catch (e) {}
+  }
 });
 
 // ============ IPC Handlers ============
@@ -942,6 +1205,9 @@ ipcMain.handle('get-config', () => {
     refreshIntervalSeconds: config.refreshIntervalSeconds || 300,
     budgetAlertEnabled: config.budgetAlertEnabled !== false,
     balanceThreshold: config.balanceThreshold || 50,
+    alwaysOnTop: !!config.alwaysOnTop,
+    alwaysOnTopBehavior: config.alwaysOnTopBehavior || 'none',
+    alwaysOnTopOpacity: Number(config.alwaysOnTopOpacity) || 0.35,
     packaged: app.isPackaged,
     hasApiKey: !!(account && account.apiKey),
     hasUsageToken: !!(account && account.usageToken),
@@ -1047,8 +1313,11 @@ ipcMain.handle('save-budget-options', (event, options = {}) => {
   };
 });
 
+// Window options (always on top / hover behavior)
+ipcMain.handle('save-window-options', (event, options = {}) => saveWindowOptions(options));
+
 // Window controls
-ipcMain.handle('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
+ipcMain.handle('window-minimize', () => { if (mainWindow) mainWindow.hide(); });
 ipcMain.handle('window-close', () => { if (mainWindow) mainWindow.hide(); });
 
 // Verify API key
