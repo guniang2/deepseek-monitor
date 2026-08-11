@@ -41,7 +41,7 @@ jobs:
       - name: Build & publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --publish always ${{ matrix.args }}
+        run: npx electron-builder --publish always ${{ matrix.args }} --config.publish.owner=${{ github.repository_owner }} --config.publish.repo=${{ github.event.repository.name }}
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
