@@ -50,3 +50,6 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# IDE local device info
+.marscode/

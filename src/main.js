@@ -135,6 +135,10 @@ function normalizeConfig() {
     config.alwaysOnTop = false;
     migrated = true;
   }
+  if (!config.windowBounds || typeof config.windowBounds !== 'object') {
+    config.windowBounds = { width: 380, height: 640 };
+    migrated = true;
+  }
   if (!['none', 'hide', 'fade'].includes(config.alwaysOnTopBehavior)) {
     config.alwaysOnTopBehavior = 'none';
     migrated = true;
@@ -259,6 +263,24 @@ function setAutoLaunch(enabled) {
       } else {
         try { fs.unlinkSync(plistPath); } catch (e) {}
       }
+    } else if (process.platform === 'linux') {
+      // XDG autostart entry (~/.config/autostart)
+      const autostartDir = path.join(app.getPath('home'), '.config', 'autostart');
+      const desktopPath = path.join(autostartDir, 'deepseek-monitor.desktop');
+      if (enabled) {
+        const entry = [
+          '[Desktop Entry]',
+          'Type=Application',
+          'Name=DeepSeek Monitor',
+          `Exec="${appPath}" --no-sandbox %U`,
+          'X-GNOME-Autostart-enabled=true',
+          ''
+        ].join('\n');
+        fs.mkdirSync(autostartDir, { recursive: true });
+        fs.writeFileSync(desktopPath, entry);
+      } else {
+        try { fs.unlinkSync(desktopPath); } catch (e) {}
+      }
     }
     config.autoLaunch = enabled;
     saveConfig();
@@ -270,6 +292,7 @@ function setAutoLaunch(enabled) {
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let boundsSaveTimer = null;
 
 // Always-on-top level: 'screen-saver' stays above almost everything on
 // Windows/macOS; Linux only supports 'normal'/'floating'.
@@ -282,6 +305,39 @@ function showMainWindow() {
   mainWindow.show();
   mainWindow.focus();
   sendToRenderer('window-shown');
+}
+
+// Restore the last window bounds if they are still on a connected display.
+function getSavedWindowBounds() {
+  const saved = config.windowBounds;
+  if (!saved || typeof saved !== 'object') return null;
+  const x = Math.round(Number(saved.x));
+  const y = Math.round(Number(saved.y));
+  const width = Math.round(Number(saved.width));
+  const height = Math.round(Number(saved.height));
+  if (![x, y, width, height].every(Number.isFinite)) return null;
+  if (width < 360 || height < 580 || width > 10000 || height > 10000) return null;
+  const visible = screen.getAllDisplays().some((display) => {
+    const area = display.bounds;
+    return x < area.x + area.width && x + width > area.x &&
+           y < area.y + area.height && y + height > area.y;
+  });
+  return visible ? { x, y, width, height } : null;
+}
+
+function saveWindowBounds() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const bounds = mainWindow.getBounds();
+  config.windowBounds = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+  saveConfig();
+}
+
+function scheduleWindowBoundsSave() {
+  if (boundsSaveTimer) clearTimeout(boundsSaveTimer);
+  boundsSaveTimer = setTimeout(() => {
+    boundsSaveTimer = null;
+    saveWindowBounds();
+  }, 300);
 }
 
 function getAppIconPath() {
@@ -494,9 +550,11 @@ function notify(title, body) {
 }
 
 function createWindow() {
+  const savedBounds = getSavedWindowBounds();
   mainWindow = new BrowserWindow({
-    width: 380,
-    height: 640,
+    ...(savedBounds
+      ? { x: savedBounds.x, y: savedBounds.y, width: savedBounds.width, height: savedBounds.height }
+      : { width: 380, height: 640 }),
     minWidth: 360,
     minHeight: 580,
     frame: false,
@@ -537,6 +595,9 @@ function createWindow() {
     // 最小化后隐藏到托盘，确保任务栏不残留图标
     mainWindow.hide();
   });
+
+  mainWindow.on('move', scheduleWindowBoundsSave);
+  mainWindow.on('resize', scheduleWindowBoundsSave);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -661,6 +722,11 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  if (boundsSaveTimer) {
+    clearTimeout(boundsSaveTimer);
+    boundsSaveTimer = null;
+  }
+  saveWindowBounds();
   if (x11Display && x11Display.client && typeof x11Display.client.terminate === 'function') {
     try { x11Display.client.terminate(); } catch (e) {}
   }

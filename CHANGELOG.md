@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-12
+
+### Added
+
+- **Window position memory** — the window position and size are saved on exit and restored on the next launch (with a safety check so it never reappears off-screen after a monitor layout change)
+- **Linux auto-launch** — enabling "launch at startup" now writes an XDG autostart entry on Linux (previously it was a no-op)
+
+### Fixed
+
+- Linux: the deb-installed app failed to launch from the desktop icon (Chromium sandbox init crash); the desktop entry now uses `--no-sandbox`, matching the AppImage
+- Linux: the app icon showed the default gear because icons were installed to an invalid `hicolor/0x0` path; a standard hicolor icon set (16–512) is shipped now
+- Linux: the deb post-install script sets `chrome-sandbox` ownership to root and the package is built with root file ownership
+- Linux: `.marscode` IDE local files are ignored by git
+
+### Changed
+
+- Release publishing targets the repository where the CI workflow runs, so fork builds publish to the fork's Releases page
+- CI builds the Linux `.deb` package in addition to the AppImage
+
 ## [1.2.0] - 2026-08-11
 
 ### Added
