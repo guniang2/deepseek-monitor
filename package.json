@@ -34,10 +34,19 @@
     },
     "linux": {
       "target": "AppImage",
-      "icon": "build/icons"
+      "icon": "build/icons",
+      "executableArgs": [
+        "--no-sandbox"
+      ]
     },
     "deb": {
-      "afterInstall": "scripts/after-install.tpl"
+      "afterInstall": "scripts/after-install.tpl",
+      "fpm": [
+        "--deb-user",
+        "root",
+        "--deb-group",
+        "root"
+      ]
     },
     "nsis": {
       "oneClick": false,

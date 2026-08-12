@@ -268,7 +268,7 @@ function setAutoLaunch(enabled) {
           '[Desktop Entry]',
           'Type=Application',
           'Name=DeepSeek Monitor',
-          `Exec="${appPath}" %U`,
+          `Exec="${appPath}" --no-sandbox %U`,
           'X-GNOME-Autostart-enabled=true',
           ''
         ].join('\n');
