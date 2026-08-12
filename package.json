@@ -36,6 +36,9 @@
       "target": "AppImage",
       "icon": "build/icons"
     },
+    "deb": {
+      "afterInstall": "scripts/after-install.tpl"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true

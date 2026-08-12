@@ -259,6 +259,24 @@ function setAutoLaunch(enabled) {
       } else {
         try { fs.unlinkSync(plistPath); } catch (e) {}
       }
+    } else if (process.platform === 'linux') {
+      // XDG autostart entry (~/.config/autostart)
+      const autostartDir = path.join(app.getPath('home'), '.config', 'autostart');
+      const desktopPath = path.join(autostartDir, 'deepseek-monitor.desktop');
+      if (enabled) {
+        const entry = [
+          '[Desktop Entry]',
+          'Type=Application',
+          'Name=DeepSeek Monitor',
+          `Exec="${appPath}" %U`,
+          'X-GNOME-Autostart-enabled=true',
+          ''
+        ].join('\n');
+        fs.mkdirSync(autostartDir, { recursive: true });
+        fs.writeFileSync(desktopPath, entry);
+      } else {
+        try { fs.unlinkSync(desktopPath); } catch (e) {}
+      }
     }
     config.autoLaunch = enabled;
     saveConfig();

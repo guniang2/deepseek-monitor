@@ -53,7 +53,7 @@ How to add screenshots:
 - **7-day trend charts** — visualize the last 7 days of token usage, broken down by cache hit / cache miss / output
 - **Usage drill-down** — click a model card to see per-day token consumption and request counts
 - **Auto refresh** — 1 min / 5 min / 30 min / 1 hour intervals
-- **Launch at startup** — supported on Windows and macOS
+- **Launch at startup** — supported on Windows, macOS, and Linux
 - **System tray** — closes or minimizes to the tray instead of quitting, summon it anytime
 - **Always-on-top widget mode** — pin the window above other apps; hovering over it auto-hides or fades it to a preset opacity (click-through, so it never blocks your work) and it restores once the mouse moves away (controllable from the tray menu too)
 - **One-click token sync** — built-in browser login window that captures your usage token automatically
