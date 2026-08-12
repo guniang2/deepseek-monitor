@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Minimizing the window now hides it to the tray so no taskbar icon remains
 - Hover detection on Linux queries the X server directly for the real cursor position (Electron's cached cursor API is unreliable there); Windows and macOS use the built-in API
+- Window position and size are remembered and restored on the next launch (with a safety check so the window never reappears off-screen)
 
 ### Fixed
 
